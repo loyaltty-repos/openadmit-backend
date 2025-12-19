@@ -742,14 +742,11 @@
 import httpResponse from "../../util/httpResponse.js";
 import responseMessage from "../../constant/responseMessage.js";
 import httpError from "../../util/httpError.js";
-import quicker from "../../util/quicker.js";
+import quicker from "../../util/quicker.js"; // kept to avoid breaking imports elsewhere
 import config from "../../config/config.js";
 import Payment from "../../model/paymentModel.js";
 import Student from "../../model/studentModel.js";
 
-import { Cashfree, CASHFREE_API_VERSION } from "../../config/cashfreeConfig.js";
-
-import { PAYMENT_PLANS } from "../../constant/application.js";
 import emailService from "../../service/email.service.js";
 import { generateReceipt } from "../../service/receiptService.js";
 import {
@@ -757,35 +754,31 @@ import {
   PaymentInitiationAdminEmailTemplate,
 } from "../../service/emailTemplates.js";
 
+import { PAYMENT_PLANS } from "../../constant/application.js";
+
+// ✅ Cashfree imports (works whether you export client or not)
+import { Cashfree, cashfreeClient, CASHFREE_API_VERSION } from "../../config/cashfreeConfig.js";
+
 /**
- * Small helper to support both SDK call signatures that Cashfree has used in docs:
- * - Cashfree.PGCreateOrder(request)
- * - Cashfree.PGCreateOrder(apiVersion, request)
- * Same for fetch calls.
+ * Universal caller that supports BOTH Cashfree SDK styles:
+ * - v5+: instance client => cashfreeClient.PGCreateOrder(request)
+ * - v4: static => Cashfree.PGCreateOrder(apiVersion, request)
  */
 async function callCashfree(methodName, ...args) {
-  const fn = Cashfree?.[methodName];
-  if (typeof fn !== "function") {
-    throw new Error(`Cashfree SDK method not found: ${methodName}`);
+  // Prefer v5 instance client
+  if (cashfreeClient && typeof cashfreeClient[methodName] === "function") {
+    return cashfreeClient[methodName](...args);
   }
 
-  // Try versioned signature first (older SDK docs)
-  try {
-    if (args.length >= 1) {
-      const res = await fn(CASHFREE_API_VERSION, ...args);
-      return res;
-    }
-  } catch (e) {
-    // fall through to unversioned call
+  // Fallback to v4 static
+  if (Cashfree && typeof Cashfree[methodName] === "function") {
+    return Cashfree[methodName](CASHFREE_API_VERSION || "2023-08-01", ...args);
   }
 
-  // Try unversioned signature (newer SDK docs)
-  return fn(...args);
+  throw new Error(`Cashfree SDK method not found: ${methodName}`);
 }
 
 function normalizeStudentPhone(student) {
-  // Cashfree requires a phone in customer_details for many flows.
-  // Keep it robust by trying common field names and falling back.
   const raw =
     student?.phone ||
     student?.mobile ||
@@ -793,22 +786,59 @@ function normalizeStudentPhone(student) {
     student?.phoneNumber ||
     student?.contactNumber;
 
-  // If you store country code separately, adjust here.
   const digits = (raw || "").toString().replace(/\D/g, "");
-  // basic fallback: Cashfree sandbox accepts test numbers; production should be real
+  // fallback test phone (replace with your preference)
   return digits && digits.length >= 10 ? digits.slice(-10) : "9999999999";
 }
 
 function buildReturnUrl() {
-  // Keep it optional but useful (Cashfree supports {order_id} templating in docs)
+  // Cashfree return_url should contain {order_id} placeholder in many flows
+  // (it’s fine even if you don’t use redirect flow, but useful for hosted checkout)
   const base =
     config.FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
   return `${base}/payment/callback?order_id={order_id}`;
 }
 
+function buildNotifyUrl() {
+  // optional webhook/notify url if you implement webhooks
+  const base =
+    config.BACKEND_URL || process.env.BACKEND_URL || "http://localhost:5000";
+  return `${base}/api/payment/cashfree/webhook`;
+}
+
+/**
+ * Fetch payment success from Cashfree:
+ * - Order must be PAID
+ * - At least one payment must be SUCCESS
+ *
+ * Cashfree order creation returns payment_session_id used for checkout. :contentReference[oaicite:2]{index=2}
+ */
+async function fetchCashfreePaidStatus(orderId) {
+  const orderRes = await callCashfree("PGFetchOrder", orderId);
+  const order = orderRes?.data || orderRes || {};
+
+  // Payments list
+  const paymentsRes = await callCashfree("PGOrderFetchPayments", orderId);
+  const payments = paymentsRes?.data || paymentsRes || [];
+
+  const successPayments = Array.isArray(payments)
+    ? payments.filter((p) => p?.payment_status === "SUCCESS")
+    : [];
+
+  const chosenPayment = successPayments[0] || null;
+
+  return {
+    order,
+    payments,
+    isPaid: order?.order_status === "PAID" && !!chosenPayment,
+    chosenPayment,
+  };
+}
+
 export default {
   /**
-   * PLAN PAYMENT (replaces Razorpay order creation with Cashfree order creation)
+   * ===== PLAN PAYMENT INIT (Cashfree) =====
+   * req.body: { category: 'masters', planType: 'pro' }
    */
   initiatePayment: async (req, res, next) => {
     try {
@@ -829,24 +859,25 @@ export default {
       }
 
       const selectedPlan = PAYMENT_PLANS[category][planType];
-      const amount = selectedPlan.price;
+      const amount = Number(selectedPlan.price);
 
-      // Get student details (Cashfree order needs customer_details)
+      // Fetch student for Cashfree customer_details
       const student = await Student.findById(studentId).select(
         "name email phone mobile mobileNumber phoneNumber contactNumber"
       );
 
-      const customerName = student?.name || student?.email?.split("@")?.[0] || "Student";
+      const customerName =
+        student?.name || student?.email?.split("@")?.[0] || "Student";
       const customerEmail = student?.email || "no-reply@example.com";
       const customerPhone = normalizeStudentPhone(student);
 
-      // Cashfree order_id must be <= 50 chars, allowed: alphanumeric, _ and -
+      // Cashfree order_id limit is typically <= 50 chars
       const timestamp = Date.now().toString().slice(-8);
       const orderId = `ord_${studentId.slice(0, 10)}_${timestamp}`.slice(0, 50);
 
       const orderRequest = {
         order_id: orderId,
-        order_amount: Number(amount),
+        order_amount: amount,
         order_currency: "INR",
         customer_details: {
           customer_id: studentId.slice(0, 30),
@@ -856,16 +887,18 @@ export default {
         },
         order_meta: {
           return_url: buildReturnUrl(),
+          notify_url: buildNotifyUrl(), // optional
         },
       };
 
-      // Create Cashfree Order (returns payment_session_id)
-      // Cashfree docs: Create Order gives payment_session_id used for checkout :contentReference[oaicite:1]{index=1}
+      // ✅ Create Cashfree order => returns payment_session_id :contentReference[oaicite:3]{index=3}
       const cfRes = await callCashfree("PGCreateOrder", orderRequest);
-      const cfData = cfRes?.data || {};
+      const cfData = cfRes?.data || cfRes || {};
 
       const paymentSessionId =
-        cfData.payment_session_id || cfData.paymentSessionId || cfData.payment_session;
+        cfData.payment_session_id ||
+        cfData.paymentSessionId ||
+        cfData.payment_session;
 
       if (!paymentSessionId) {
         return httpError(
@@ -876,9 +909,10 @@ export default {
         );
       }
 
+      // Save Payment in DB (keeps your structure)
       const payment = new Payment({
         studentId,
-        orderId: orderId,
+        orderId,
         amount,
         currency: "INR",
         planId: selectedPlan.id,
@@ -891,7 +925,7 @@ export default {
 
       await payment.save();
 
-      // 🔔 Admin email (unchanged)
+      // 🔔 Send admin initiation email (same as your Razorpay flow)
       try {
         if (student && student.email) {
           const studentName = student.name || student.email.split("@")[0];
@@ -902,22 +936,24 @@ export default {
             studentEmail,
             planName: selectedPlan.name,
             planPrice: amount,
-            orderId: orderId,
+            orderId,
             category,
           });
 
           const adminEmail = process.env.ADMIN_EMAIL;
-          if (adminEmail) await emailService.sendEmail(adminEmail, template);
+          if (adminEmail) {
+            await emailService.sendEmail(adminEmail, template);
+          }
         }
       } catch (emailError) {
         console.log("Error sending payment initiation email:", emailError);
       }
 
+      // Keep response keys compatible with your old frontend
       return httpResponse(req, res, 200, responseMessage.SUCCESS, {
-        orderId: orderId,
+        orderId,
         amount,
         currency: "INR",
-        // keep "key" field so frontend doesn't break if it expects it
         key: config.CASHFREE_KEY_ID || process.env.CASHFREE_KEY_ID,
         paymentSessionId,
         planDetails: selectedPlan,
@@ -930,16 +966,16 @@ export default {
   },
 
   /**
-   * LLM UPGRADE PAYMENT INIT
-   * - you said: you'll be getting studentId and payment amount in request body
-   * - but your code currently uses authenticated student — keeping that intact.
+   * ===== LLM UPGRADE INIT (Cashfree) =====
+   * req.body: { amount: 100 }  (studentId from auth)
    */
   initiatePaymentForLLMUpgrade: async (req, res, next) => {
     try {
       const studentId = req.authenticatedStudent._id.toString();
       const { amount } = req.body;
 
-      if (!amount || Number(amount) <= 0) {
+      const amt = Number(amount);
+      if (!amt || amt <= 0) {
         return httpError(
           next,
           new Error("Valid amount is required for LLM upgrade"),
@@ -952,16 +988,20 @@ export default {
         "name email phone mobile mobileNumber phoneNumber contactNumber"
       );
 
-      const customerName = student?.name || student?.email?.split("@")?.[0] || "Student";
+      const customerName =
+        student?.name || student?.email?.split("@")?.[0] || "Student";
       const customerEmail = student?.email || "no-reply@example.com";
       const customerPhone = normalizeStudentPhone(student);
 
       const timestamp = Date.now().toString().slice(-8);
-      const orderId = `ord_llm_${studentId.slice(0, 8)}_${timestamp}`.slice(0, 50);
+      const orderId = `ord_llm_${studentId.slice(0, 8)}_${timestamp}`.slice(
+        0,
+        50
+      );
 
       const orderRequest = {
         order_id: orderId,
-        order_amount: Number(amount),
+        order_amount: amt,
         order_currency: "INR",
         customer_details: {
           customer_id: studentId.slice(0, 30),
@@ -971,14 +1011,17 @@ export default {
         },
         order_meta: {
           return_url: buildReturnUrl(),
+          notify_url: buildNotifyUrl(), // optional
         },
       };
 
       const cfRes = await callCashfree("PGCreateOrder", orderRequest);
-      const cfData = cfRes?.data || {};
+      const cfData = cfRes?.data || cfRes || {};
 
       const paymentSessionId =
-        cfData.payment_session_id || cfData.paymentSessionId || cfData.payment_session;
+        cfData.payment_session_id ||
+        cfData.paymentSessionId ||
+        cfData.payment_session;
 
       if (!paymentSessionId) {
         return httpError(
@@ -991,8 +1034,8 @@ export default {
 
       const payment = new Payment({
         studentId,
-        orderId: orderId,
-        amount: Number(amount),
+        orderId,
+        amount: amt,
         currency: "INR",
         planId: "llm_upgrade",
         planName: "LLM University Finder Upgrade",
@@ -1005,8 +1048,8 @@ export default {
       await payment.save();
 
       return httpResponse(req, res, 200, responseMessage.SUCCESS, {
-        orderId: orderId,
-        amount: Number(amount),
+        orderId,
+        amount: amt,
         currency: "INR",
         key: config.CASHFREE_KEY_ID || process.env.CASHFREE_KEY_ID,
         paymentSessionId,
@@ -1025,13 +1068,12 @@ export default {
   },
 
   /**
-   * VERIFY LLM UPGRADE PAYMENT
-   * Cashfree approach:
-   * - Fetch order by order_id, ensure order_status === "PAID"
-   * - Fetch payments for order, ensure any payment_status === "SUCCESS"
-   *
-   * Order status values include ACTIVE / PAID / EXPIRED / TERMINATED ... :contentReference[oaicite:2]{index=2}
-   * Payment status values include SUCCESS / FAILED / USER_DROPPED / PENDING ... :contentReference[oaicite:3]{index=3}
+   * ===== VERIFY LLM UPGRADE (Cashfree) =====
+   * Accepts old fields too (signature ignored) so frontend won’t break.
+   * req.body can be:
+   *  - { orderId }
+   *  - { orderId, paymentId }
+   *  - { orderId, paymentId, signature }  (ignored)
    */
   verifyPaymentForLLMUpgrade: async (req, res, next) => {
     const studentId = req.authenticatedStudent._id;
@@ -1048,48 +1090,32 @@ export default {
         );
       }
 
-      // 1) Fetch order
-      const orderRes = await callCashfree("PGFetchOrder", orderId);
-      const order = orderRes?.data || {};
+      const { order, payments, isPaid, chosenPayment } =
+        await fetchCashfreePaidStatus(orderId);
 
-      if (order.order_status !== "PAID") {
+      if (!isPaid) {
         return httpError(
           next,
-          new Error("Payment not completed (order not PAID)"),
+          new Error("Payment not completed (order not PAID / no SUCCESS payment)"),
           req,
           400
         );
       }
 
-      // 2) Fetch payments for the order
-      const paymentsRes = await callCashfree("PGOrderFetchPayments", orderId);
-      const payments = paymentsRes?.data || [];
+      // pick payment if client sent paymentId, else use first success
+      const finalPayment =
+        paymentId && Array.isArray(payments)
+          ? payments.find((p) => String(p?.cf_payment_id) === String(paymentId)) ||
+            chosenPayment
+          : chosenPayment;
 
-      const successfulPayments = payments.filter(
-        (p) => p.payment_status === "SUCCESS"
-      );
-
-      if (!successfulPayments.length) {
-        return httpError(
-          next,
-          new Error("Order is PAID but no SUCCESS payment found"),
-          req,
-          400
-        );
-      }
-
-      const chosenPayment = paymentId
-        ? successfulPayments.find((p) => String(p.cf_payment_id) === String(paymentId)) ||
-          successfulPayments[0]
-        : successfulPayments[0];
-
-      // 3) Mark Payment SUCCESS in your DB
+      // Update Payment doc
       const paymentDoc = await Payment.findOneAndUpdate(
         { orderId, studentId, status: "PENDING" },
         {
-          paymentId: String(chosenPayment.cf_payment_id || paymentId || ""),
+          paymentId: String(finalPayment?.cf_payment_id || paymentId || ""),
           status: "SUCCESS",
-          rawGatewayResponse: { order, payment: chosenPayment },
+          rawGatewayResponse: { order, payment: finalPayment, payments },
         },
         { new: true }
       );
@@ -1103,8 +1129,8 @@ export default {
         );
       }
 
-      // 4) Credits logic: 5 credits per ₹50
-      const amountInRupees = Number(paymentDoc.amount); // you stored rupees already
+      // Credits: 5 credits per ₹50 (your same rule)
+      const amountInRupees = Number(paymentDoc.amount);
       const pricePerPack = 50;
       const creditsPerPack = 5;
 
@@ -1163,7 +1189,12 @@ export default {
   },
 
   /**
-   * VERIFY PLAN PAYMENT (Cashfree)
+   * ===== VERIFY MAIN PLAN PAYMENT (Cashfree) =====
+   * Accepts old fields too (signature ignored) so frontend won’t break.
+   * req.body can be:
+   *  - { orderId }
+   *  - { orderId, paymentId }
+   *  - { orderId, paymentId, signature }  (ignored)
    */
   verifyPayment: async (req, res, next) => {
     const studentId = req.authenticatedStudent._id;
@@ -1180,48 +1211,31 @@ export default {
         );
       }
 
-      // 1) Fetch order from Cashfree and confirm PAID
-      const orderRes = await callCashfree("PGFetchOrder", orderId);
-      const order = orderRes?.data || {};
+      const { order, payments, isPaid, chosenPayment } =
+        await fetchCashfreePaidStatus(orderId);
 
-      if (order.order_status !== "PAID") {
+      if (!isPaid) {
         return httpError(
           next,
-          new Error("Payment not completed (order not PAID)"),
+          new Error("Payment not completed (order not PAID / no SUCCESS payment)"),
           req,
           400
         );
       }
 
-      // 2) Fetch payments and confirm a SUCCESS transaction exists
-      const paymentsRes = await callCashfree("PGOrderFetchPayments", orderId);
-      const payments = paymentsRes?.data || [];
+      const finalPayment =
+        paymentId && Array.isArray(payments)
+          ? payments.find((p) => String(p?.cf_payment_id) === String(paymentId)) ||
+            chosenPayment
+          : chosenPayment;
 
-      const successfulPayments = payments.filter(
-        (p) => p.payment_status === "SUCCESS"
-      );
-
-      if (!successfulPayments.length) {
-        return httpError(
-          next,
-          new Error("Order is PAID but no SUCCESS payment found"),
-          req,
-          400
-        );
-      }
-
-      const chosenPayment = paymentId
-        ? successfulPayments.find((p) => String(p.cf_payment_id) === String(paymentId)) ||
-          successfulPayments[0]
-        : successfulPayments[0];
-
-      // 3) Update your Payment record
+      // Update Payment status in DB
       const payment = await Payment.findOneAndUpdate(
         { orderId, studentId, status: "PENDING" },
         {
-          paymentId: String(chosenPayment.cf_payment_id || paymentId || ""),
+          paymentId: String(finalPayment?.cf_payment_id || paymentId || ""),
           status: "SUCCESS",
-          rawGatewayResponse: { order, payment: chosenPayment },
+          rawGatewayResponse: { order, payment: finalPayment, payments },
         },
         { new: true }
       );
@@ -1235,6 +1249,7 @@ export default {
         );
       }
 
+      // Keep your plan mapping logic
       const planDetails = PAYMENT_PLANS[payment.planCategory][payment.planType];
       const degree = payment.planCategory === "masters" ? "MASTER" : "BACHELOR";
 
