@@ -1,4 +1,5 @@
 import dotenv from 'dotenv'
+import { CASHFREE_API_VERSION } from './cashfreeConfig';
 
 dotenv.config()
 
@@ -35,6 +36,12 @@ const config = Object.freeze({
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
     DEFAULT_FEE: process.env.DEFAULT_FEE || 500,
 
+    CASHFREE_API_VERSION: process.env.CASHFREE_API_VERSION,
+    CASHFREE_KEY_ID: process.env.CASHFREE_KEY_ID,
+    CASHFREE_SECRET_KEY: process.env.CASHFREE_SECRET_KEY,
+    CASHFREE_ENV: process.env.CASHFREE_ENV || 'SANDBOX',
+
+
     //ImageKit
     IMAGEKIT_PUBLIC_KEY: process.env.IMAGEKIT_PUBLIC_KEY,
     IMAGEKIT_PRIVATE_KEY: process.env.IMAGEKIT_PRIVATE_KEY,
@@ -47,7 +54,7 @@ const config = Object.freeze({
         port: parseInt(process.env.EMAIL_PORT || '587', 10),
         user: process.env.EMAIL_USER || "",
         password: process.env.EMAIL_PASSWORD || "",
-        from: process.env.EMAIL_FROM || "GoUpBroad <noreply@goupbroad.com>"
+        from: process.env.EMAIL_FROM || "OpenAdmit <noreply@openadmit.com>"
     },
 
     //firebase
