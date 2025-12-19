@@ -36,7 +36,7 @@ export const PAYMENT_PLANS = Object.freeze(
         masters: {
             basic: {
                 id: 'MASTERS_BASIC',
-                name: 'UpBroad Basic',
+                name: 'OpenAdmit Basic',
                 price: 24999,
                 features: [
                     'Help you shortlist universities',
@@ -45,7 +45,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             pro: {
                 id: 'MASTERS_PRO',
-                name: 'UpBroad Pro',
+                name: 'OpenAdmit Pro',
                 price: 39999,
                 features: [
                     'Help you shortlist universities',
@@ -57,7 +57,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             premier: {
                 id: 'MASTERS_PREMIER',
-                name: 'UpBroad Premier',
+                name: 'OpenAdmit Premier',
                 price: 59999,
                 features: [
                     'Help you shortlist universities',
@@ -76,7 +76,7 @@ export const PAYMENT_PLANS = Object.freeze(
         bachelors: {
             basic: {
                 id: 'BACHELORS_BASIC',
-                name: 'UpBroad Basic',
+                name: 'OpenAdmit Basic',
                 price: 44999,
                 features: [
                     'One (1) Statement of Purpose (SOP) preparation',
@@ -86,7 +86,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             pro: {
                 id: 'BACHELORS_PRO',
-                name: 'UpBroad Pro',
+                name: 'OpenAdmit Pro',
                 price: 69999,
                 features: [
                     'Help in shortlisting universities (US)',
@@ -97,7 +97,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             premier: {
                 id: 'BACHELORS_PREMIER',
-                name: 'UpBroad Premier',
+                name: 'OpenAdmit Premier',
                 price: 84999,
                 features: [
                     'Help in shortlisting universities (US)',
@@ -112,7 +112,7 @@ export const PAYMENT_PLANS = Object.freeze(
         mba: {
             basic: {
                 id: 'MBA_BASIC',
-                name: 'UpBroad Basic',
+                name: 'OpenAdmit Basic',
                 price: 44999,
                 features: [
                     'Help you shortlist universities',
@@ -121,7 +121,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             pro: {
                 id: 'MBA_PRO',
-                name: 'UpBroad Pro',
+                name: 'OpenAdmit Pro',
                 price: 59999,
                 features: [
                     'Help you shortlist universities',
@@ -133,7 +133,7 @@ export const PAYMENT_PLANS = Object.freeze(
             },
             premier: {
                 id: 'MBA_PREMIER',
-                name: 'UpBroad Premier',
+                name: 'OpenAdmit Premier',
                 price: 79999,
                 features: [
                     'Help you shortlist universities',
