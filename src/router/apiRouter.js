@@ -87,6 +87,10 @@ router.route('/student/tasks/:taskId/subtasks/:subtaskId/documents')
     .get(authentication, documentController.getStudentDocumentsByTaskAndSubtaskId);
 router.route('/student/tasks/documents')
     .get(authentication, documentController.getStudentAllDocuments);
+router.route('/student/document')
+    .get(authentication, documentController.getStudentDocumentByStudentId)
+router.route('/student/document/:documentId')
+    .put(authentication, documentController.updateStudentDocumetId);
 
 router.route('/student/timeline')
     .get(authentication, studentController.getStudentTimeline);
@@ -217,7 +221,13 @@ router.route('/admin/tasks/:taskId')
 router.route('/admin/tasks/:taskId/responses')
     .get(memberAccess, taskController.getStudentQuestionnaireResponses);
 
+router.route('/admin/document/upload-document')
+    .post(memberAccess, documentController.uploadDocument)
+    .get(memberAccess, documentController.getDocument);
+router.route('/admin/document/delete-uploaded-document/:documentId')
+    .delete(memberAccess, documentController.deleteUploadedDocument);
 
+    
 // route to update response
 
 router.route('/admin/tasks/:taskId/upload-documents')

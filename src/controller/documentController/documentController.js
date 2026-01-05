@@ -4,6 +4,7 @@ import httpResponse from '../../util/httpResponse.js';
 import { ValidateCreateDocument, ValidateUpdateDocument, ValidateFilterDocuments, validateJoiSchema, ValidateGetStudentDocuments } from '../../service/validationService.js';
 import TaskSubtaskAssignment from '../../model/taskSubtaskAssignmentModel.js';
 import Document from '../../model/documentModel.js';
+import DocumentModel from '../../model/Document.js';
 import mongoose from 'mongoose';
 export default {
     // Create a new document (ADMIN and EDITOR only)
@@ -571,6 +572,113 @@ export default {
             console.log(err);
             httpError(next, err, req, 500);
         }
-    }
+    },
+
+     uploadDocument : async (req, res, next) => {
+        try {
+            const { documentName, documentURL, priority, student, assignee } = req.body;
+            const newDocument = new DocumentModel({
+                documentName,
+                documentURL,
+                priority,
+                student,
+                assignee
+            });
+            await newDocument.save();
+            httpResponse(req, res, 201, responseMessage.SUCCESS, {
+                message: 'Document uploaded successfully',
+                document: newDocument
+            });
+        } catch (err) {
+            httpError(next, err, req, 500);
+        }
+    },
+
+    getDocument : async (req, res, next) => {
+        try {
+            const { page, limit } = req.query;
+
+            if (!page || +page <= 0 || !limit || +limit < 1) {
+                return httpError(next, new Error("All Field Are Required"), req, 400)
+            }
+            const skip = (page - 1) * limit;
+            const documents = await DocumentModel.find()
+                .skip(skip)
+                .limit(limit)
+                .populate('student')
+                .populate('assignee')
+                .lean();
+            httpResponse(req, res, 200, responseMessage.SUCCESS, {
+                documents
+            });
+        } catch (err) {
+            httpError(next, err, req, 500);
+        }
+    },
+
+    deleteUploadedDocument : async (req, res, next) => {
+        try {
+            const { documentId } = req.params;
+
+            // Check role
+            if (!['ADMIN', 'EDITOR'].includes(req.authenticatedMember.role)) {
+                return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 403);
+            }
+            if (!documentId || !mongoose.Types.ObjectId.isValid(documentId)) {
+                return httpError(next, new Error("Valid Document Id Required"), req, 400);
+            }
+            const document = await DocumentModel.findById(documentId);
+            if (!document) {
+                return httpError(next, new Error(responseMessage.NOT_FOUND('Document')), req, 404);
+            }
+            await DocumentModel.findByIdAndDelete(documentId);
+            httpResponse(req, res, 200, responseMessage.SUCCESS, {
+                message: 'Document deleted successfully'
+            });
+        } catch (err) {
+            httpError(next, err, req, 500);
+        }
+    },
+
+    getStudentDocumentByStudentId : async (req, res, next) => {
+        try {
+            const studentId  = req.authenticatedStudent._id;
+            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+                return httpError(next, new Error("Student Id Required"), req, 400);
+            }
+            const documents = await DocumentModel.find({ student: studentId }).populate('student').populate('assignee').lean();
+            httpResponse(req, res, 200, responseMessage.SUCCESS, {
+                documents
+            });
+        } catch (err) {
+            httpError(next, err, req, 500);
+        }
+    },
+    updateStudentDocumetId : async (req, res, next) => {
+        try {
+            const { documentId } = req.params;
+            const { status } = req.body;
+
+            const studentId  = req.authenticatedStudent._id;
+            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+                return httpError(next, new Error("Student Id Required"), req, 400);
+            }
+            if (!documentId || !mongoose.Types.ObjectId.isValid(documentId)) {
+                return httpError(next, new Error("Valid Document Id Required"), req, 400);
+            }
+            const document = await DocumentModel.findOne({ _id: documentId, student: studentId });
+            if (!document) {
+                return httpError(next, new Error(responseMessage.NOT_FOUND('Document')), req, 404);
+            }
+            document.status = status || document.status;
+            await document.save();
+            httpResponse(req, res, 200, responseMessage.SUCCESS, {
+                message: 'Document updated successfully',
+                document : document
+            });
+        } catch (err) {
+            httpError(next, err, req, 500);
+        }
+    },
     // ************* ADMIN SIDE CONTROLLER ******************
 };
