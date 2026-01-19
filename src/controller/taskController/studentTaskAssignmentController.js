@@ -6,6 +6,7 @@ import StudentTaskAssignment from '../../model/studentTaskAssignmentModel.js';
 import SubtaskQuestionnaireAssignment from '../../model/subtaskQuestionnaireAssignmentModel.js';
 import Task from '../../model/taskModel.js';
 import Student from '../../model/studentModel.js';
+import Document from "../../model/Document.js";
 import TaskSubtaskAssignment from '../../model/taskSubtaskAssignmentModel.js';
 
 export default {
@@ -324,49 +325,119 @@ export default {
         }
     },
 
+    // getStudentUpcomingTasks: async (req, res, next) => {
+    //     try {
+    //         const studentId = req.authenticatedStudent._id.toString();
+    //         const { page = 1, limit = 10 } = req.query;
+
+    //         const skip = (page - 1) * limit;
+    //         const currentDate = new Date(); // Dynamic current date and time (e.g., 2025-07-10T16:44:00+05:30)
+
+    //         const taskAssignments = await StudentTaskAssignment.find({
+    //             studentId,
+    //             status: { $in: ['PENDING', 'IN_PROGRESS'] },
+    //             $or: [
+    //                 { dueDate: { $ne: null } },
+    //                 { dueDate: null }
+    //             ]
+    //         })
+    //             .populate({
+    //                 path: 'taskId',
+    //                 select: 'title description logo priority assignee createdDate category',
+    //                 populate: {
+    //                     path: 'category',
+    //                     select: 'name description'
+    //                 }
+    //             })
+    //             .populate({
+    //                 path: 'assignee',
+    //                 select: 'name email role'
+    //             })
+    //             .sort({ dueDate: 1, assignedAt: 1 })
+    //             .skip(skip)
+    //             .limit(parseInt(limit))
+    //             .lean();
+
+    //         const total = await StudentTaskAssignment.countDocuments({
+    //             studentId,
+    //             status: { $in: ['PENDING', 'IN_PROGRESS'] },
+    //             $or: [
+    //                 { dueDate: { $ne: null } },
+    //                 { dueDate: null }
+    //             ]
+    //         });
+
+    //         const upcomingTasks = taskAssignments.map(ta => ({
+    //             ...ta.taskId,
+    //             assignedAt: ta.assignedAt,
+    //             dueDate: ta.dueDate,
+    //             status: ta.status,
+    //             isLocked: ta.isLocked,
+    //             isOverdue: ta.dueDate && ta.dueDate < currentDate,
+    //             createdAt: ta.createdAt,
+    //             updatedAt: ta.updatedAt
+    //         }));
+
+    //         const responseData = {
+    //             message: "I'm running from the updated function",
+    //             total: total,
+    //             pages: Math.ceil(total / limit),
+    //             currentPage: parseInt(page),
+    //             limit: parseInt(limit),
+    //             upcomingTasks: upcomingTasks
+    //         };
+
+    //         httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
+    //     } catch (err) {
+    //         httpError(next, err, req, 500);
+    //     }
+    // },
+
+
     getStudentUpcomingTasks: async (req, res, next) => {
         try {
             const studentId = req.authenticatedStudent._id.toString();
+
+            // Keep existing pagination for tasks (no breaking change)
             const { page = 1, limit = 10 } = req.query;
 
-            const skip = (page - 1) * limit;
-            const currentDate = new Date(); // Dynamic current date and time (e.g., 2025-07-10T16:44:00+05:30)
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+            const skip = (pageNum - 1) * limitNum;
 
-            const taskAssignments = await StudentTaskAssignment.find({
+            const currentDate = new Date();
+
+            // -------------------------
+            // 1) Existing tasks query (UNCHANGED behavior)
+            // -------------------------
+            const taskQuery = {
                 studentId,
-                status: { $in: ['PENDING', 'IN_PROGRESS'] },
-                $or: [
-                    { dueDate: { $ne: null } },
-                    { dueDate: null }
-                ]
-            })
-                .populate({
-                    path: 'taskId',
-                    select: 'title description logo priority assignee createdDate category',
-                    populate: {
-                        path: 'category',
-                        select: 'name description'
-                    }
-                })
-                .populate({
-                    path: 'assignee',
-                    select: 'name email role'
-                })
-                .sort({ dueDate: 1, assignedAt: 1 })
-                .skip(skip)
-                .limit(parseInt(limit))
-                .lean();
+                status: { $in: ["PENDING", "IN_PROGRESS"] },
+                $or: [{ dueDate: { $ne: null } }, { dueDate: null }],
+            };
 
-            const total = await StudentTaskAssignment.countDocuments({
-                studentId,
-                status: { $in: ['PENDING', 'IN_PROGRESS'] },
-                $or: [
-                    { dueDate: { $ne: null } },
-                    { dueDate: null }
-                ]
-            });
+            const [taskAssignments, totalTasks] = await Promise.all([
+                StudentTaskAssignment.find(taskQuery)
+                    .populate({
+                        path: "taskId",
+                        select: "title description logo priority assignee createdDate category",
+                        populate: {
+                            path: "category",
+                            select: "name description",
+                        },
+                    })
+                    .populate({
+                        path: "assignee",
+                        select: "name email role",
+                    })
+                    .sort({ dueDate: 1, assignedAt: 1 })
+                    .skip(skip)
+                    .limit(limitNum)
+                    .lean(),
+                StudentTaskAssignment.countDocuments(taskQuery),
+            ]);
 
-            const upcomingTasks = taskAssignments.map(ta => ({
+            const upcomingTasks = taskAssignments.map((ta) => ({
                 ...ta.taskId,
                 assignedAt: ta.assignedAt,
                 dueDate: ta.dueDate,
@@ -374,16 +445,82 @@ export default {
                 isLocked: ta.isLocked,
                 isOverdue: ta.dueDate && ta.dueDate < currentDate,
                 createdAt: ta.createdAt,
-                updatedAt: ta.updatedAt
+                updatedAt: ta.updatedAt,
             }));
 
+            // -------------------------
+            // 2) Documents assigned to student (NEW)
+            // -------------------------
+            // Pick which document statuses you consider "upcoming".
+            // If you want ALL documents for the student, remove status filter.
+            const documentQuery = {
+                student: studentId,
+                status: { $in: ["DRAFT", "IN_REVIEW"] }, // tweak as you want
+            };
+
+            // You can paginate documents too. To avoid breaking existing paging semantics,
+            // we paginate documents separately (docPage/docLimit optional).
+            const docPageNum = parseInt(req.query.docPage || 1);
+            const docLimitNum = parseInt(req.query.docLimit || 10);
+            const docSkip = (docPageNum - 1) * docLimitNum;
+
+            const [documents, totalDocuments] = await Promise.all([
+                Document.find(documentQuery)
+                    .populate({
+                        path: "assignee",
+                        select: "name email role",
+                    })
+                    .sort({ createdDate: -1, createdAt: -1 })
+                    .skip(docSkip)
+                    .limit(docLimitNum)
+                    .lean(),
+                Document.countDocuments(documentQuery),
+            ]);
+
+            // "Same response format" idea:
+            // We’ll map docs into a task-like envelope, but keep them under upcomingDocuments
+            // so existing frontend consuming upcomingTasks won’t break.
+            const upcomingDocuments = documents.map((doc) => ({
+                _id: doc._id,
+                documentName: doc.documentName,
+                documentURL: doc.documentURL,
+                priority: doc.priority,
+                assignee: doc.assignee,
+                status: doc.status,
+
+                // keep task-like fields present to make UI rendering easier
+                assignedAt: doc.createdDate || doc.createdAt, // closest equivalent
+                dueDate: null, // no dueDate in schema
+                isLocked: false,
+                isOverdue: false,
+
+                isDefault: doc.isDefault,
+                student: doc.student,
+                createdAt: doc.createdAt,
+                updatedAt: doc.updatedAt,
+            }));
+
+            // -------------------------
+            // 3) Response (tasks unchanged + docs added)
+            // -------------------------
             const responseData = {
                 message: "I'm running from the updated function",
-                total: total,
-                pages: Math.ceil(total / limit),
-                currentPage: parseInt(page),
-                limit: parseInt(limit),
-                upcomingTasks: upcomingTasks
+
+                // Existing task meta (UNCHANGED keys)
+                total: totalTasks,
+                pages: Math.ceil(totalTasks / limitNum),
+                currentPage: pageNum,
+                limit: limitNum,
+                upcomingTasks,
+
+                // NEW: documents meta + list
+                documentsMeta: {
+                    total: totalDocuments,
+                    pages: Math.ceil(totalDocuments / docLimitNum),
+                    currentPage: docPageNum,
+                    limit: docLimitNum,
+                },
+                upcomingDocuments,
             };
 
             httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
@@ -391,82 +528,82 @@ export default {
             httpError(next, err, req, 500);
         }
     },
-    getStudentUpcomingTasks: async (req, res, next) => {
-        try {
-            const studentId = req.authenticatedStudent._id.toString();
-            let { page = 1, limit = 10 } = req.query;
+    // getStudentUpcomingTasks: async (req, res, next) => {
+    //     try {
+    //         const studentId = req.authenticatedStudent._id.toString();
+    //         let { page = 1, limit = 10 } = req.query;
 
-            // Ensure numbers
-            page = parseInt(page, 10) || 1;
-            limit = parseInt(limit, 10) || 10;
+    //         // Ensure numbers
+    //         page = parseInt(page, 10) || 1;
+    //         limit = parseInt(limit, 10) || 10;
 
-            const skip = (page - 1) * limit;
-            const currentDate = new Date();
+    //         const skip = (page - 1) * limit;
+    //         const currentDate = new Date();
 
-            const taskAssignments = await StudentTaskAssignment.find({
-                studentId,
-                status: { $in: ['PENDING', 'IN_PROGRESS'] }
-                // your $or on dueDate was effectively doing nothing, so I removed it
-            })
-                .populate({
-                    path: 'taskId',
-                    select: 'title description logo priority assignee createdDate category',
-                    populate: {
-                        path: 'category',
-                        select: 'name description'
-                    }
-                })
-                .sort({ dueDate: 1, assignedAt: 1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
+    //         const taskAssignments = await StudentTaskAssignment.find({
+    //             studentId,
+    //             status: { $in: ['PENDING', 'IN_PROGRESS'] }
+    //             // your $or on dueDate was effectively doing nothing, so I removed it
+    //         })
+    //             .populate({
+    //                 path: 'taskId',
+    //                 select: 'title description logo priority assignee createdDate category',
+    //                 populate: {
+    //                     path: 'category',
+    //                     select: 'name description'
+    //                 }
+    //             })
+    //             .sort({ dueDate: 1, assignedAt: 1 })
+    //             .skip(skip)
+    //             .limit(limit)
+    //             .lean();
 
-            // This still counts total assignments, same as before
-            const total = await StudentTaskAssignment.countDocuments({
-                studentId,
-                status: { $in: ['PENDING', 'IN_PROGRESS'] }
-            });
+    //         // This still counts total assignments, same as before
+    //         const total = await StudentTaskAssignment.countDocuments({
+    //             studentId,
+    //             status: { $in: ['PENDING', 'IN_PROGRESS'] }
+    //         });
 
-            // ✅ Remove duplicates by taskId
-            // because you might have multiple StudentTaskAssignment docs
-            // pointing to the same taskId for the same student
-            const seenTaskIds = new Set();
-            const upcomingTasks = [];
+    //         // ✅ Remove duplicates by taskId
+    //         // because you might have multiple StudentTaskAssignment docs
+    //         // pointing to the same taskId for the same student
+    //         const seenTaskIds = new Set();
+    //         const upcomingTasks = [];
 
-            for (const ta of taskAssignments) {
-                if (!ta.taskId) continue; // safety guard
+    //         for (const ta of taskAssignments) {
+    //             if (!ta.taskId) continue; // safety guard
 
-                const taskId = ta.taskId._id.toString();
+    //             const taskId = ta.taskId._id.toString();
 
-                // Skip if we've already pushed this task once
-                if (seenTaskIds.has(taskId)) continue;
-                seenTaskIds.add(taskId);
+    //             // Skip if we've already pushed this task once
+    //             if (seenTaskIds.has(taskId)) continue;
+    //             seenTaskIds.add(taskId);
 
-                upcomingTasks.push({
-                    ...ta.taskId,
-                    assignedAt: ta.assignedAt,
-                    dueDate: ta.dueDate,
-                    status: ta.status,
-                    isLocked: ta.isLocked,
-                    isOverdue: ta.dueDate ? ta.dueDate < currentDate : null,
-                    createdAt: ta.createdAt,
-                    updatedAt: ta.updatedAt
-                });
-            }
+    //             upcomingTasks.push({
+    //                 ...ta.taskId,
+    //                 assignedAt: ta.assignedAt,
+    //                 dueDate: ta.dueDate,
+    //                 status: ta.status,
+    //                 isLocked: ta.isLocked,
+    //                 isOverdue: ta.dueDate ? ta.dueDate < currentDate : null,
+    //                 createdAt: ta.createdAt,
+    //                 updatedAt: ta.updatedAt
+    //             });
+    //         }
 
-            const responseData = {
-                total: total, // still total assignments; change to upcomingTasks.length if you prefer
-                pages: Math.ceil(total / limit),
-                currentPage: page,
-                limit: limit,
-                upcomingTasks: upcomingTasks
-            };
+    //         const responseData = {
+    //             total: total, // still total assignments; change to upcomingTasks.length if you prefer
+    //             pages: Math.ceil(total / limit),
+    //             currentPage: page,
+    //             limit: limit,
+    //             upcomingTasks: upcomingTasks
+    //         };
 
-            httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
-        } catch (err) {
-            httpError(next, err, req, 500);
-        }
-    },
+    //         httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
+    //     } catch (err) {
+    //         httpError(next, err, req, 500);
+    //     }
+    // },
 
 
     // Admin side

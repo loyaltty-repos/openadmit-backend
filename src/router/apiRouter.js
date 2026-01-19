@@ -24,6 +24,8 @@ import applicationController from '../controller/applicationController/applicati
 import taskCategoryController from '../controller/taslCategoryController/taskCategoryController.js'
 import passport from "../config/passport.js"
 import chatController from '../controller/Chat/chat.controller.js'
+import notificationController from '../controller/notificationController/notificationController.js'
+
 
 
 const router = Router()
@@ -350,6 +352,23 @@ router.route('/chat/student/members')
 
 //   router.route('/chat/cleanup/:chatId').delete(authentication, chatController.cleanupChatRoom);
 // ********************* CHAT CONTROLLER ROUTES END ******************
+
+
+// Notification Routes for students and admins
+
+router.route('/notifications/student')
+    .get(authentication, notificationController.getStudentNotifications)
+
+router.route('/notifications/student/:notificationId')
+    .get(authentication, notificationController.getStudentNotificationById)
+    .put(authentication, notificationController.markNotificationAsRead);
+
+router.route('/notifications/admin')
+    .get(memberAccess, notificationController.getAdminNotifications)
+
+router.route('/notifications/admin/:notificationId')
+    .get(memberAccess, notificationController.getAdminNotificationById)
+    .put(memberAccess, notificationController.markNotificationAsRead);
 
 
 

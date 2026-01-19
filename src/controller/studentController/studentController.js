@@ -15,6 +15,7 @@ import { AdminQuestionnaireSubmissionTemplate, QuestionnaireSubmissionTemplate }
 import Questionnaire from '../../model/questionnaireModel.js';
 import Response from '../../model/responseModel.js';
 import StudentActivity from '../../model/studentActivitySchema.js';
+import Document from "../../model/Document.js";
 import UniversityRecommendation from '../../model/UniversityRecommendation.js';
 import { ACTIVITY_STATUSES, ACTIVITY_TYPES } from '../../constant/application.js';
 import StudentTaskAssignment from '../../model/studentTaskAssignmentModel.js';
@@ -826,46 +827,123 @@ export default {
         }
     },
     // Get student dashboard stats
+    // getStudentDashboardStats: async (req, res, next) => {
+    //     try {
+    //         const studentId = req.authenticatedStudent._id
+
+    //         const taskStats = await StudentTaskAssignment.aggregate([
+    //             { $match: { studentId: studentId } },
+    //             {
+    //                 $group: {
+    //                     _id: '$status',
+    //                     count: { $sum: 1 }
+    //                 }
+    //             }
+    //         ]);
+
+    //         const universityStats = await StudentUniversityAssignment.countDocuments({
+    //             studentId: studentId
+    //         });
+
+    //         const statsMap = taskStats.reduce((acc, curr) => {
+    //             acc[curr._id] = curr.count;
+    //             return acc;
+    //         }, {});
+
+    //         const totalAssignedTasks = taskStats.reduce((sum, curr) => sum + curr.count, 0);
+    //         const totalCompleted = statsMap['COMPLETED'] || 0;
+    //         const totalPending = (statsMap['PENDING'] || 0) + (statsMap['IN_PROGRESS'] || 0);
+    //         const totalUniversityAssigned = universityStats;
+
+    //         const responseData = {
+    //             totalAssignedTasks: totalAssignedTasks,
+    //             totalCompletedTasks: totalCompleted,
+    //             totalPendingTasks: totalPending,
+    //             totalUniversityAssigned: totalUniversityAssigned
+    //         };
+
+    //         httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
+    //     } catch (err) {
+    //         httpError(next, err, req, 500);
+    //     }
+    // },
     getStudentDashboardStats: async (req, res, next) => {
-        try {
-            const studentId = req.authenticatedStudent._id
+  try {
+    const studentId = req.authenticatedStudent._id;
 
-            const taskStats = await StudentTaskAssignment.aggregate([
-                { $match: { studentId: studentId } },
-                {
-                    $group: {
-                        _id: '$status',
-                        count: { $sum: 1 }
-                    }
-                }
-            ]);
+    // -----------------------------
+    // 1) Task stats (existing logic)
+    // -----------------------------
+    const taskStats = await StudentTaskAssignment.aggregate([
+      { $match: { studentId: studentId } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
 
-            const universityStats = await StudentUniversityAssignment.countDocuments({
-                studentId: studentId
-            });
+    const statsMap = taskStats.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {});
 
-            const statsMap = taskStats.reduce((acc, curr) => {
-                acc[curr._id] = curr.count;
-                return acc;
-            }, {});
+    const totalAssignedTasksOnly = taskStats.reduce((sum, curr) => sum + curr.count, 0);
+    const totalCompletedTasks = statsMap["COMPLETED"] || 0;
+    const totalPendingTasks = (statsMap["PENDING"] || 0) + (statsMap["IN_PROGRESS"] || 0);
 
-            const totalAssignedTasks = taskStats.reduce((sum, curr) => sum + curr.count, 0);
-            const totalCompleted = statsMap['COMPLETED'] || 0;
-            const totalPending = (statsMap['PENDING'] || 0) + (statsMap['IN_PROGRESS'] || 0);
-            const totalUniversityAssigned = universityStats;
+    // -----------------------------------
+    // 2) Document stats (NEW, additive)
+    // -----------------------------------
+    const documentStats = await Document.aggregate([
+      { $match: { student: studentId } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
 
-            const responseData = {
-                totalAssignedTasks: totalAssignedTasks,
-                totalCompletedTasks: totalCompleted,
-                totalPendingTasks: totalPending,
-                totalUniversityAssigned: totalUniversityAssigned
-            };
+    const docStatsMap = documentStats.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {});
 
-            httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
-        } catch (err) {
-            httpError(next, err, req, 500);
-        }
-    },
+    const totalAssignedDocuments = documentStats.reduce((sum, curr) => sum + curr.count, 0);
+
+    // Map document statuses to your dashboard buckets:
+    // - COMPLETED docs: status === "COMPLETED"
+    // - PENDING docs: DRAFT + IN_REVIEW (and optionally REJECTED if you want)
+    const totalCompletedDocuments = docStatsMap["COMPLETED"] || 0;
+    const totalPendingDocuments =
+      (docStatsMap["DRAFT"] || 0) + (docStatsMap["IN_REVIEW"] || 0);
+
+    // -----------------------------
+    // 3) University stats (existing)
+    // -----------------------------
+    const totalUniversityAssigned = await StudentUniversityAssignment.countDocuments({
+      studentId: studentId,
+    });
+
+    // -----------------------------
+    // 4) Final totals (no breaking)
+    // -----------------------------
+    const responseData = {
+      // same keys as before, now includes tasks + documents
+      totalAssignedTasks: totalAssignedTasksOnly + totalAssignedDocuments,
+      totalCompletedTasks: totalCompletedTasks + totalCompletedDocuments,
+      totalPendingTasks: totalPendingTasks + totalPendingDocuments,
+      totalUniversityAssigned: totalUniversityAssigned,
+    };
+
+    httpResponse(req, res, 200, responseMessage.SUCCESS, responseData);
+  } catch (err) {
+    httpError(next, err, req, 500);
+  }
+},
+
 
 
 }
