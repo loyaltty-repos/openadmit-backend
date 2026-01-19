@@ -5,6 +5,7 @@ import { ValidateCreateDocument, ValidateUpdateDocument, ValidateFilterDocuments
 import TaskSubtaskAssignment from '../../model/taskSubtaskAssignmentModel.js';
 import Document from '../../model/documentModel.js';
 import DocumentModel from '../../model/Document.js';
+import Notification from '../../model/Notification.js';
 import mongoose from 'mongoose';
 export default {
     // Create a new document (ADMIN and EDITOR only)
@@ -585,6 +586,75 @@ export default {
                 assignee
             });
             await newDocument.save();
+
+            // src/model/notificationModel.js
+// import mongoose from "mongoose";
+
+// const notificationSchema = new mongoose.Schema(
+//   {
+//     title: {
+//       type: String,
+//       required: true,
+//       trim: true,
+//       maxlength: 200,
+//     },
+//     message: {
+//       type: String,
+//       required: true,
+//       trim: true,
+//       maxlength: 2000,
+//     },
+//     type: {
+//       type: String,
+//       enum: ["TASK", "MESSAGE", "ALERT", "INFO"],
+//       default: "INFO",
+//       required: true,
+//     },
+
+//     // ✅ supports both Member + Student
+//     recipientType: {
+//       type: String,
+//       enum: ["Member", "Student"],
+//       required: true,
+//       index: true,
+//     },
+//     recipientId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       required: true,
+//       refPath: "recipientType", // 👈 dynamic ref
+//       index: true,
+//     },
+
+//     isRead: {
+//       type: Boolean,
+//       default: false,
+//       index: true,
+//     },
+//   },
+//   {
+//     timestamps: { createdAt: "createdDate", updatedAt: "updatedDate" },
+//   }
+// );
+
+// // Helpful compound index for fast inbox queries
+// notificationSchema.index({ recipientType: 1, recipientId: 1, isRead: 1, createdDate: -1 });
+
+// const Notification = mongoose.model("Notification", notificationSchema);
+
+// export default Notification;
+
+
+           // Create a notification for student
+
+           const notification = new Notification({
+               title: 'New Document Uploaded',
+               message: `A new document "${documentName}" has been uploaded for you.`,
+               type: 'TASK',
+               recipientType: 'Student',
+               recipientId: student,
+               isRead: false
+           });
+           await notification.save();
             httpResponse(req, res, 201, responseMessage.SUCCESS, {
                 message: 'Document uploaded successfully',
                 document: newDocument

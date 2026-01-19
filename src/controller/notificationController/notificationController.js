@@ -3,35 +3,34 @@ import mongoose from "mongoose";
 import httpResponse from "../../util/httpResponse.js";
 import responseMessage from "../../constant/responseMessage.js";
 import httpError from "../../util/httpError.js";
-import Notification from "../../model/Notification.js";
+import Notification from "../../model/Notification.js"; // ✅ use your actual new model file name/path
 
 /**
  * Helper: figure out "who" is making the request.
- * - student routes use authentication middleware => req.authenticatedStudent
- * - admin routes use memberAccess middleware => likely req.authenticatedMember (or similar)
+ * Student middleware => req.authenticatedStudent
+ * Admin/member middleware => req.authenticatedMember / req.member / req.authenticatedAdmin (depending on your app)
  *
- * This keeps the controller resilient even if your middleware sets a different key.
+ * IMPORTANT:
+ * recipientType must match schema enum EXACTLY: ["Member", "Student"]
  */
 const getRequester = (req) => {
-  // Student middleware (as seen in studentController)
   if (req?.authenticatedStudent?._id) {
-    return { id: req.authenticatedStudent._id, kind: "STUDENT" };
+    return { recipientId: req.authenticatedStudent._id, recipientType: "Student" };
   }
 
-  // Admin/Member middleware (guessing common patterns)
   if (req?.authenticatedMember?._id) {
-    return { id: req.authenticatedMember._id, kind: "ADMIN" };
+    return { recipientId: req.authenticatedMember._id, recipientType: "Member" };
   }
 
   if (req?.authenticatedAdmin?._id) {
-    return { id: req.authenticatedAdmin._id, kind: "ADMIN" };
+    return { recipientId: req.authenticatedAdmin._id, recipientType: "Member" };
   }
 
   if (req?.member?._id) {
-    return { id: req.member._id, kind: "ADMIN" };
+    return { recipientId: req.member._id, recipientType: "Member" };
   }
 
-  return { id: null, kind: "UNKNOWN" };
+  return { recipientId: null, recipientType: null };
 };
 
 const parsePagination = (req) => {
@@ -45,18 +44,17 @@ const parsePagination = (req) => {
   return { page, limit, skip, sortOrder };
 };
 
-const buildFilters = (req, recipientId) => {
-  const filter = { recipientId };
+const buildFilters = (req, recipientType, recipientId) => {
+  const filter = { recipientType, recipientId };
 
-  // Optional filters
+  // Optional filter: isRead=true/false
   if (req.query.isRead !== undefined) {
-    // supports "true"/"false" strings too
     const val = req.query.isRead;
     filter.isRead = val === true || val === "true";
   }
 
+  // Optional filter: type=TASK|MESSAGE|ALERT|INFO
   if (req.query.type) {
-    // TASK | MESSAGE | ALERT | INFO
     filter.type = req.query.type;
   }
 
@@ -74,19 +72,34 @@ const buildFilters = (req, recipientId) => {
   return filter;
 };
 
+const validateObjectIdOr422 = (next, req, idValue, label = "notificationId") => {
+  if (!idValue || !mongoose.Types.ObjectId.isValid(idValue)) {
+    httpError(
+      next,
+      new Error(responseMessage.CUSTOM_MESSAGE(`Valid ${label} is required`)),
+      req,
+      422
+    );
+    return false;
+  }
+  return true;
+};
+
 export default {
   // =========================
   // STUDENT: GET ALL
   // =========================
   getStudentNotifications: async (req, res, next) => {
     try {
-      const { id: recipientId } = getRequester(req);
-      if (!recipientId) {
+      const requester = getRequester(req);
+
+      // Force recipientType for this endpoint
+      if (!requester.recipientId || requester.recipientType !== "Student") {
         return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
       }
 
       const { page, limit, skip, sortOrder } = parsePagination(req);
-      const filter = buildFilters(req, recipientId);
+      const filter = buildFilters(req, "Student", requester.recipientId);
 
       const [total, notifications] = await Promise.all([
         Notification.countDocuments(filter),
@@ -97,18 +110,18 @@ export default {
           .lean()
       ]);
 
-      const pagination = {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page < (Math.ceil(total / limit) || 1),
-        hasPrevPage: page > 1
-      };
+      const totalPages = Math.ceil(total / limit) || 1;
 
       httpResponse(req, res, 200, responseMessage.SUCCESS, {
         notifications,
-        pagination
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
       });
     } catch (err) {
       httpError(next, err, req, 500);
@@ -120,24 +133,19 @@ export default {
   // =========================
   getStudentNotificationById: async (req, res, next) => {
     try {
-      const { id: recipientId } = getRequester(req);
-      if (!recipientId) {
+      const requester = getRequester(req);
+
+      if (!requester.recipientId || requester.recipientType !== "Student") {
         return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
       }
 
       const { notificationId } = req.params;
-      if (!notificationId || !mongoose.Types.ObjectId.isValid(notificationId)) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("Valid notificationId is required")),
-          req,
-          422
-        );
-      }
+      if (!validateObjectIdOr422(next, req, notificationId)) return;
 
       const notification = await Notification.findOne({
         _id: notificationId,
-        recipientId
+        recipientType: "Student",
+        recipientId: requester.recipientId
       }).lean();
 
       if (!notification) {
@@ -151,17 +159,19 @@ export default {
   },
 
   // =========================
-  // ADMIN: GET ALL
+  // ADMIN/MEMBER: GET ALL
   // =========================
   getAdminNotifications: async (req, res, next) => {
     try {
-      const { id: recipientId } = getRequester(req);
-      if (!recipientId) {
+      const requester = getRequester(req);
+
+      // Force recipientType for this endpoint
+      if (!requester.recipientId || requester.recipientType !== "Member") {
         return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
       }
 
       const { page, limit, skip, sortOrder } = parsePagination(req);
-      const filter = buildFilters(req, recipientId);
+      const filter = buildFilters(req, "Member", requester.recipientId);
 
       const [total, notifications] = await Promise.all([
         Notification.countDocuments(filter),
@@ -172,18 +182,18 @@ export default {
           .lean()
       ]);
 
-      const pagination = {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page < (Math.ceil(total / limit) || 1),
-        hasPrevPage: page > 1
-      };
+      const totalPages = Math.ceil(total / limit) || 1;
 
       httpResponse(req, res, 200, responseMessage.SUCCESS, {
         notifications,
-        pagination
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
       });
     } catch (err) {
       httpError(next, err, req, 500);
@@ -191,28 +201,23 @@ export default {
   },
 
   // =========================
-  // ADMIN: GET BY ID
+  // ADMIN/MEMBER: GET BY ID
   // =========================
   getAdminNotificationById: async (req, res, next) => {
     try {
-      const { id: recipientId } = getRequester(req);
-      if (!recipientId) {
+      const requester = getRequester(req);
+
+      if (!requester.recipientId || requester.recipientType !== "Member") {
         return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
       }
 
       const { notificationId } = req.params;
-      if (!notificationId || !mongoose.Types.ObjectId.isValid(notificationId)) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("Valid notificationId is required")),
-          req,
-          422
-        );
-      }
+      if (!validateObjectIdOr422(next, req, notificationId)) return;
 
       const notification = await Notification.findOne({
         _id: notificationId,
-        recipientId
+        recipientType: "Member",
+        recipientId: requester.recipientId
       }).lean();
 
       if (!notification) {
@@ -227,28 +232,34 @@ export default {
 
   // =========================
   // MARK AS READ (STUDENT + ADMIN)
-  // same handler is used in both routes
+  // used in both routes; decides recipientType from route
   // =========================
   markNotificationAsRead: async (req, res, next) => {
     try {
-      const { id: recipientId } = getRequester(req);
-      if (!recipientId) {
+      const requester = getRequester(req);
+      if (!requester.recipientId || !requester.recipientType) {
+        return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+      }
+
+      // For safety, map route to expected type
+      // If URL contains "/student", enforce Student; if "/admin", enforce Member.
+      const isStudentRoute = req.originalUrl?.includes("/notifications/student");
+      const expectedType = isStudentRoute ? "Student" : "Member";
+
+      if (requester.recipientType !== expectedType) {
         return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
       }
 
       const { notificationId } = req.params;
-      if (!notificationId || !mongoose.Types.ObjectId.isValid(notificationId)) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("Valid notificationId is required")),
-          req,
-          422
-        );
-      }
+      if (!validateObjectIdOr422(next, req, notificationId)) return;
 
       const updated = await Notification.findOneAndUpdate(
-        { _id: notificationId, recipientId },
-        { $set: { isRead: true, updatedDate: new Date() } },
+        {
+          _id: notificationId,
+          recipientType: expectedType,
+          recipientId: requester.recipientId
+        },
+        { $set: { isRead: true } }, // timestamps will update updatedDate automatically
         { new: true }
       ).lean();
 
