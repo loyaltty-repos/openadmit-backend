@@ -742,6 +742,15 @@ export default {
             }
             document.status = status || document.status;
             await document.save();
+            const notification = new Notification({
+                title: 'Document Status Updated',
+                message: `The status of your document "${document.documentName}" has been updated to "${document.status}".`,
+                type: 'INFO',
+                recipientType: 'Member',
+                recipientId: document.assignee,
+                isRead: false
+            });
+            await notification.save();
             httpResponse(req, res, 200, responseMessage.SUCCESS, {
                 message: 'Document updated successfully',
                 document : document
