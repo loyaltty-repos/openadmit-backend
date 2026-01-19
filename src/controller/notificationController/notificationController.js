@@ -257,7 +257,7 @@ export default {
         {
           _id: notificationId,
           recipientType: expectedType,
-          recipientId: requester.recipientId
+          
         },
         { $set: { isRead: true } }, // timestamps will update updatedDate automatically
         { new: true }
