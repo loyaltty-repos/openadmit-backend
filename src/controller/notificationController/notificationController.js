@@ -172,7 +172,7 @@ export default {
 
       const { page, limit, skip, sortOrder } = parsePagination(req);
       const filter = buildFilters(req, "Member", requester.recipientId);
-
+      delete filter.recipientId; // Admins can see all Member notifications
       const [total, notifications] = await Promise.all([
         Notification.countDocuments(filter),
         Notification.find(filter)
