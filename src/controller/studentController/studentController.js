@@ -17,6 +17,7 @@ import Response from '../../model/responseModel.js';
 import StudentActivity from '../../model/studentActivitySchema.js';
 import Document from "../../model/Document.js";
 import UniversityRecommendation from '../../model/UniversityRecommendation.js';
+import Notification from '../../model/Notification.js';
 import { ACTIVITY_STATUSES, ACTIVITY_TYPES } from '../../constant/application.js';
 import StudentTaskAssignment from '../../model/studentTaskAssignmentModel.js';
 import { getUniversitiesAccurate, getUniversitiesFast, } from '../../util/universityFinder.js';
@@ -717,6 +718,72 @@ export default {
                     },
                     $inc: { version: 1 }
                 };
+
+                // src/model/notificationModel.js
+// import mongoose from "mongoose";
+
+// const notificationSchema = new mongoose.Schema(
+//   {
+//     title: {
+//       type: String,
+//       required: true,
+//       trim: true,
+//       maxlength: 200,
+//     },
+//     message: {
+//       type: String,
+//       required: true,
+//       trim: true,
+//       maxlength: 2000,
+//     },
+//     type: {
+//       type: String,
+//       enum: ["TASK", "MESSAGE", "UNIVERSITY", "ALERT", "INFO"],
+//       default: "INFO",
+//       required: true,
+//     },
+
+//     // ✅ supports both Member + Student
+//     recipientType: {
+//       type: String,
+//       enum: ["Member", "Student"],
+//       required: true,
+//       index: true,
+//     },
+//     recipientId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       required: true,
+//       refPath: "recipientType", // 👈 dynamic ref
+//       index: true,
+//     },
+
+//     isRead: {
+//       type: Boolean,
+//       default: false,
+//       index: true,
+//     },
+//   },
+//   {
+//     timestamps: { createdAt: "createdDate", updatedAt: "updatedDate" },
+//   }
+// );
+
+// // Helpful compound index for fast inbox queries
+// notificationSchema.index({ recipientType: 1, recipientId: 1, isRead: 1, createdDate: -1 });
+
+// const Notification = mongoose.model("Notification", notificationSchema);
+
+// export default Notification;
+
+
+                const notifcation = new Notification({
+                    title: 'Questionnaire Response Submitted',
+                    message: ` Response for the question "${question.question}" in questionnaire "${questionnaire.title}" has been submitted successfully.`,
+                    type: 'TASK',
+                    recipientType: 'Member',
+                    recipientId: task.assignee
+                });
+                await notifcation.save();
 
                 return Response.findOneAndUpdate(filter, update, {
                     upsert: true,
