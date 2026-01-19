@@ -426,10 +426,10 @@ export default {
                             select: "name description",
                         },
                     })
-                    .populate({
-                        path: "assignee",
-                        select: "name email role",
-                    })
+                    // .populate({
+                    //     path: "assignee",
+                    //     select: "name email role",
+                    // })
                     .sort({ dueDate: 1, assignedAt: 1 })
                     .skip(skip)
                     .limit(limitNum)
@@ -466,10 +466,10 @@ export default {
 
             const [documents, totalDocuments] = await Promise.all([
                 Document.find(documentQuery)
-                    .populate({
-                        path: "assignee",
-                        select: "name email role",
-                    })
+                    // .populate({
+                    //     path: "assignee",
+                    //     select: "name email role",
+                    // })
                     .sort({ createdDate: -1, createdAt: -1 })
                     .skip(docSkip)
                     .limit(docLimitNum)
