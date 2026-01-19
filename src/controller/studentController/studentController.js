@@ -272,6 +272,15 @@ export default {
             });
             await activity.save();
 
+            const notification = new Notification({
+                title: 'University Status Updated',
+                message: `University status has been updated for assignment ${populatedAssignment?.universityId?.name}`,
+                type: 'TASK',
+                recipientType: 'Member',
+                recipientId: populatedAssignment.assignedBy._id
+            });
+            await notification.save();
+
             httpResponse(req, res, 200, responseMessage.SUCCESS, {
                 message: 'Assigned university status updated successfully',
                 assignment: populatedAssignment
