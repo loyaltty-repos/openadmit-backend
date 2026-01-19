@@ -3,6 +3,7 @@ import httpError from '../../util/httpError.js';
 import responseMessage from '../../constant/responseMessage.js';
 import University from '../../model/universityModel.js';
 import Student from '../../model/studentModel.js';
+import Notification from '../../model/Notification.js';
 import StudentUniversityAssignment from '../../model/studentUniversityAssignmentModel.js';
 import { ValidateCreateStudentUniversityAssignment, ValidateUpdateStudentUniversityAssignment, ValidateFilterStudentUniversityAssignments, validateJoiSchema } from '../../service/validationService.js';
 import mongoose from 'mongoose';
@@ -58,6 +59,15 @@ export default {
                 .populate('assignedBy', 'name email')
                 .lean();
 
+            const notification = new Notification({
+                title: 'New University Assignment',
+                message: `You have been assigned to the university: ${university.name}`,
+                type: 'UNIVERSITY',
+                recipientType: 'Student',
+                recipientId: studentId,
+                isRead: false
+            });
+            await notification.save();
             httpResponse(req, res, 201, responseMessage.SUCCESS, {
                 message: 'Student-university assignment created successfully',
                 assignment: populatedAssignment
