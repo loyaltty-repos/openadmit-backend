@@ -13,6 +13,7 @@ import mongoose from 'mongoose';
 import { TaskAssignedTemplate } from '../../service/emailTemplates.js';
 import mailer from '../../service/email.service.js';
 import Member from '../../model/membersModel.js';
+import Notification from '../../model/Notification.js';
 import TaskCategory from '../../model/taskCategoryModel.js';
 import SubtaskQuestionnaireAssignment from '../../model/subtaskQuestionnaireAssignmentModel.js';
 
@@ -320,6 +321,18 @@ export default {
                     await mailer.sendEmail(student.email, TaskAssignedTemplate(student.name, populatedTask.title));
                 };
             }));
+
+            const notifications = studentIds.map(studentId => ({
+                title: 'New Task Assigned',
+                message: `You have been assigned a new task: ${populatedTask.title}`,
+                type: 'TASK',
+                recipientType: 'Student',
+                recipientId: studentId,
+                isRead: false
+            }));
+
+            await Promise.all(notifications.map(notification => new Notification(notification).save()));
+
             httpResponse(req, res, 201, responseMessage.SUCCESS, { message: 'Task created successfully', task: populatedTask });
 
         } catch (err) {
