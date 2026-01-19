@@ -274,5 +274,126 @@ export default {
     } catch (err) {
       httpError(next, err, req, 500);
     }
-  }
+  },
+
+    // ======================================================
+  // STUDENT -> ADMIN (Member): Chat Message Notification
+  // POST /notifications/student/chat-messages
+  // ======================================================
+  sendChatMessageNotificationToAdmin: async (req, res, next) => {
+    try {
+      const { authenticatedStudent } = req;
+
+      if (!authenticatedStudent?._id) {
+        return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+      }
+
+      const { adminId, title, message } = req.body;
+
+      if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("Valid adminId is required")),
+          req,
+          422
+        );
+      }
+
+      if (!title || String(title).trim().length === 0) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+          req,
+          422
+        );
+      }
+
+      if (!message || String(message).trim().length === 0) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+          req,
+          422
+        );
+      }
+
+      const notification = await Notification.create({
+        title: String(title).trim(),
+        message: String(message).trim(),
+        type: "MESSAGE",
+        recipientType: "Member",
+        recipientId: adminId,
+        isRead: false,
+      });
+
+      return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+        message: "Chat message notification sent to admin",
+        notification,
+      });
+    } catch (err) {
+      return httpError(next, err, req, 500);
+    }
+  },
+
+  // ======================================================
+  // ADMIN (Member) -> STUDENT: Chat Message Notification
+  // POST /notifications/admin/chat-messages/:studentId
+  // ======================================================
+  sendChatMessageNotificationToStudent: async (req, res, next) => {
+    try {
+      const { authenticatedMember } = req;
+
+      if (!authenticatedMember?._id) {
+        return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+      }
+
+      const { studentId } = req.params;
+
+      if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("Valid studentId is required")),
+          req,
+          422
+        );
+      }
+
+      const { title, message } = req.body;
+
+      if (!title || String(title).trim().length === 0) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+          req,
+          422
+        );
+      }
+
+      if (!message || String(message).trim().length === 0) {
+        return httpError(
+          next,
+          new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+          req,
+          422
+        );
+      }
+
+      const notification = await Notification.create({
+        title: String(title).trim(),
+        message: String(message).trim(),
+        type: "MESSAGE",
+        recipientType: "Student",
+        recipientId: studentId,
+        isRead: false,
+      });
+
+      return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+        message: "Chat message notification sent to student",
+        notification,
+      });
+    } catch (err) {
+      return httpError(next, err, req, 500);
+    }
+  },
+
 };

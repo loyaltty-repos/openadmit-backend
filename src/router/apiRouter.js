@@ -229,7 +229,7 @@ router.route('/admin/document/upload-document')
 router.route('/admin/document/delete-uploaded-document/:documentId')
     .delete(memberAccess, documentController.deleteUploadedDocument);
 
-    
+
 // route to update response
 
 router.route('/admin/tasks/:taskId/upload-documents')
@@ -349,6 +349,17 @@ router.route('/chat/admin/students')
 router.route('/chat/student/members')
     .get(authentication, chatController.getAllMembers);
 
+router.route("/chat/student/presence")
+    .post(authentication, chatController.setStudentChatPresence)
+router.route("/chat/student/presence/admin/:adminId")
+    .get(authentication, chatController.getAdminChatPresence);
+
+router.route("/chat/admin/presence")
+    .post(memberAccess, chatController.setAdminChatPresence)
+router.route("/chat/admin/presence/student/:studentId")
+    .get(memberAccess, chatController.getStudentChatPresence);
+
+
 
 //   router.route('/chat/cleanup/:chatId').delete(authentication, chatController.cleanupChatRoom);
 // ********************* CHAT CONTROLLER ROUTES END ******************
@@ -359,12 +370,21 @@ router.route('/chat/student/members')
 router.route('/notifications/student')
     .get(authentication, notificationController.getStudentNotifications)
 
+
+
+
 router.route('/notifications/student/:notificationId')
     .get(authentication, notificationController.getStudentNotificationById)
     .put(authentication, notificationController.markNotificationAsRead);
 
 router.route('/notifications/admin')
     .get(memberAccess, notificationController.getAdminNotifications)
+
+router.route('/notifications/student/chat-messages')
+    .post(authentication, notificationController.sendChatMessageNotificationToAdmin);
+
+router.route('/notifications/admin/chat-messages/:studentId')
+    .post(memberAccess, notificationController.sendChatMessageNotificationToStudent);
 
 router.route('/notifications/admin/:notificationId')
     .get(memberAccess, notificationController.getAdminNotificationById)
