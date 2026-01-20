@@ -3,6 +3,7 @@ import responseMessage from '../../constant/responseMessage.js';
 import httpError from '../../util/httpError.js';
 import { ValidateFilterAssignedUniversities, ValidateGetQuestionnaireQuestions, ValidateGetStudentTasks, ValidateGetSubtaskQuestionnaires, ValidateProfileUpdate, ValidateSubmitQuestionnaireResponse, ValidateUpdateAssignedUniversityStatus, validateJoiSchema } from '../../service/validationService.js';
 import Student from '../../model/studentModel.js';
+import Member from '../../model/membersModel.js';
 import StudentUniversityAssignment from '../../model/studentUniversityAssignmentModel.js';
 import mongoose from 'mongoose';
 import TaskSubtaskAssignment from '../../model/taskSubtaskAssignmentModel.js';
@@ -22,6 +23,7 @@ import { ACTIVITY_STATUSES, ACTIVITY_TYPES } from '../../constant/application.js
 import StudentTaskAssignment from '../../model/studentTaskAssignmentModel.js';
 import { getUniversitiesAccurate, getUniversitiesFast, } from '../../util/universityFinder.js';
 import { assign } from 'nodemailer/lib/shared/index.js';
+import { emitToUser } from '../../config/socket.js';
 
 export default {
     getSelfData: async (req, res, next) => {
@@ -280,6 +282,16 @@ export default {
                 recipientId: populatedAssignment.assignedBy._id
             });
             await notification.save();
+
+            // emit to all the members
+            const members = await Member.find();
+            for (const member of members) {
+                try {
+                    emitToUser(member._id, "notification:new", {});
+                } catch (err) {
+                    console.error("SOCKET_EMIT_FAILED_MEMBER", err?.message || err);
+                }
+            }
 
             httpResponse(req, res, 200, responseMessage.SUCCESS, {
                 message: 'Assigned university status updated successfully',
@@ -793,6 +805,16 @@ export default {
                     recipientId: task.assignee
                 });
                 await notifcation.save();
+
+                // emit to all the members
+                const members = await Member.find();
+                for (const member of members) {
+                    try {
+                        emitToUser(member._id, "notification:new", {});
+                    } catch (err) {
+                        console.error("SOCKET_EMIT_FAILED_MEMBER", err?.message || err);
+                    }
+                }
 
                 return Response.findOneAndUpdate(filter, update, {
                     upsert: true,

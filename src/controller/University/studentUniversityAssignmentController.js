@@ -7,6 +7,7 @@ import Notification from '../../model/Notification.js';
 import StudentUniversityAssignment from '../../model/studentUniversityAssignmentModel.js';
 import { ValidateCreateStudentUniversityAssignment, ValidateUpdateStudentUniversityAssignment, ValidateFilterStudentUniversityAssignments, validateJoiSchema } from '../../service/validationService.js';
 import mongoose from 'mongoose';
+import { emitToUser } from '../../config/socket.js';
 
 export default {
     // Create a new student-university assignment (ADMIN only)
@@ -68,6 +69,12 @@ export default {
                 isRead: false
             });
             await notification.save();
+
+            try {
+                emitToUser(studentId, "notification:new", {});
+            } catch (err) {
+                console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
+            }
             httpResponse(req, res, 201, responseMessage.SUCCESS, {
                 message: 'Student-university assignment created successfully',
                 assignment: populatedAssignment
@@ -181,6 +188,12 @@ export default {
                     isRead: false
                 });
                 await notification.save();
+
+                try {
+                    emitToUser(assignment.studentId, "notification:new", {});
+                } catch (err) {
+                    console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
+                }
             } catch (err) {
                 console.error('Failed to send notification about assignment deletion:', err);
             }

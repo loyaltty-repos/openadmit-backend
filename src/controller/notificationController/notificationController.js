@@ -579,6 +579,7 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
       } catch (err) {
         console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
       }
+      
 
       // ✅ Email send to student (never breaks API)
       try {

@@ -6,7 +6,9 @@ import TaskSubtaskAssignment from '../../model/taskSubtaskAssignmentModel.js';
 import Document from '../../model/documentModel.js';
 import DocumentModel from '../../model/Document.js';
 import Notification from '../../model/Notification.js';
+import Member from '../../model/membersModel.js';
 import mongoose from 'mongoose';
+import { emitToUser } from '../../config/socket.js';
 export default {
     // Create a new document (ADMIN and EDITOR only)
     createDocument: async (req, res, next) => {
@@ -575,7 +577,7 @@ export default {
         }
     },
 
-     uploadDocument : async (req, res, next) => {
+    uploadDocument: async (req, res, next) => {
         try {
             const { documentName, documentURL, priority, student, assignee } = req.body;
             const newDocument = new DocumentModel({
@@ -588,73 +590,78 @@ export default {
             await newDocument.save();
 
             // src/model/notificationModel.js
-// import mongoose from "mongoose";
+            // import mongoose from "mongoose";
 
-// const notificationSchema = new mongoose.Schema(
-//   {
-//     title: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//       maxlength: 200,
-//     },
-//     message: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//       maxlength: 2000,
-//     },
-//     type: {
-//       type: String,
-//       enum: ["TASK", "MESSAGE", "ALERT", "INFO"],
-//       default: "INFO",
-//       required: true,
-//     },
+            // const notificationSchema = new mongoose.Schema(
+            //   {
+            //     title: {
+            //       type: String,
+            //       required: true,
+            //       trim: true,
+            //       maxlength: 200,
+            //     },
+            //     message: {
+            //       type: String,
+            //       required: true,
+            //       trim: true,
+            //       maxlength: 2000,
+            //     },
+            //     type: {
+            //       type: String,
+            //       enum: ["TASK", "MESSAGE", "ALERT", "INFO"],
+            //       default: "INFO",
+            //       required: true,
+            //     },
 
-//     // ✅ supports both Member + Student
-//     recipientType: {
-//       type: String,
-//       enum: ["Member", "Student"],
-//       required: true,
-//       index: true,
-//     },
-//     recipientId: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       required: true,
-//       refPath: "recipientType", // 👈 dynamic ref
-//       index: true,
-//     },
+            //     // ✅ supports both Member + Student
+            //     recipientType: {
+            //       type: String,
+            //       enum: ["Member", "Student"],
+            //       required: true,
+            //       index: true,
+            //     },
+            //     recipientId: {
+            //       type: mongoose.Schema.Types.ObjectId,
+            //       required: true,
+            //       refPath: "recipientType", // 👈 dynamic ref
+            //       index: true,
+            //     },
 
-//     isRead: {
-//       type: Boolean,
-//       default: false,
-//       index: true,
-//     },
-//   },
-//   {
-//     timestamps: { createdAt: "createdDate", updatedAt: "updatedDate" },
-//   }
-// );
+            //     isRead: {
+            //       type: Boolean,
+            //       default: false,
+            //       index: true,
+            //     },
+            //   },
+            //   {
+            //     timestamps: { createdAt: "createdDate", updatedAt: "updatedDate" },
+            //   }
+            // );
 
-// // Helpful compound index for fast inbox queries
-// notificationSchema.index({ recipientType: 1, recipientId: 1, isRead: 1, createdDate: -1 });
+            // // Helpful compound index for fast inbox queries
+            // notificationSchema.index({ recipientType: 1, recipientId: 1, isRead: 1, createdDate: -1 });
 
-// const Notification = mongoose.model("Notification", notificationSchema);
+            // const Notification = mongoose.model("Notification", notificationSchema);
 
-// export default Notification;
+            // export default Notification;
 
 
-           // Create a notification for student
+            // Create a notification for student
 
-           const notification = new Notification({
-               title: 'New Document Uploaded',
-               message: `A new document "${documentName}" has been uploaded for you.`,
-               type: 'TASK',
-               recipientType: 'Student',
-               recipientId: student,
-               isRead: false
-           });
-           await notification.save();
+            const notification = new Notification({
+                title: 'New Document Uploaded',
+                message: `A new document "${documentName}" has been uploaded for you.`,
+                type: 'TASK',
+                recipientType: 'Student',
+                recipientId: student,
+                isRead: false
+            });
+            await notification.save();
+            try {
+                emitToUser(student, "notification:new", {});
+            } catch (err) {
+                console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
+            }
             httpResponse(req, res, 201, responseMessage.SUCCESS, {
                 message: 'Document uploaded successfully',
                 document: newDocument
@@ -664,7 +671,7 @@ export default {
         }
     },
 
-    getDocument : async (req, res, next) => {
+    getDocument: async (req, res, next) => {
         try {
             const { page, limit } = req.query;
 
@@ -686,7 +693,7 @@ export default {
         }
     },
 
-    deleteUploadedDocument : async (req, res, next) => {
+    deleteUploadedDocument: async (req, res, next) => {
         try {
             const { documentId } = req.params;
 
@@ -710,9 +717,9 @@ export default {
         }
     },
 
-    getStudentDocumentByStudentId : async (req, res, next) => {
+    getStudentDocumentByStudentId: async (req, res, next) => {
         try {
-            const studentId  = req.authenticatedStudent._id;
+            const studentId = req.authenticatedStudent._id;
             if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
                 return httpError(next, new Error("Student Id Required"), req, 400);
             }
@@ -724,12 +731,12 @@ export default {
             httpError(next, err, req, 500);
         }
     },
-    updateStudentDocumetId : async (req, res, next) => {
+    updateStudentDocumetId: async (req, res, next) => {
         try {
             const { documentId } = req.params;
             const { status } = req.body;
 
-            const studentId  = req.authenticatedStudent._id;
+            const studentId = req.authenticatedStudent._id;
             if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
                 return httpError(next, new Error("Student Id Required"), req, 400);
             }
@@ -751,9 +758,19 @@ export default {
                 isRead: false
             });
             await notification.save();
+
+            // emit to all the members
+            const members = await Member.find();
+            for (const member of members) {
+                try {
+                    emitToUser(member._id, "notification:new", {});
+                } catch (err) {
+                    console.error("SOCKET_EMIT_FAILED_MEMBER", err?.message || err);
+                }
+            }
             httpResponse(req, res, 200, responseMessage.SUCCESS, {
                 message: 'Document updated successfully',
-                document : document
+                document: document
             });
         } catch (err) {
             httpError(next, err, req, 500);

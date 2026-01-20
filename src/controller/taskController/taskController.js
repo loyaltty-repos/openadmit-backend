@@ -332,6 +332,14 @@ export default {
             }));
 
             await Promise.all(notifications.map(notification => new Notification(notification).save()));
+            // emit to all the students
+            for (const studentId of studentIds) {
+                try {
+                    emitToUser(studentId, "notification:new", {});
+                } catch (err) {
+                    console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
+                }
+            }
 
             httpResponse(req, res, 201, responseMessage.SUCCESS, { message: 'Task created successfully', task: populatedTask });
 
