@@ -171,6 +171,20 @@ export default {
             // Delete assignment
             await StudentUniversityAssignment.findByIdAndDelete(assignmentId);
 
+            try {
+                const notification = new Notification({
+                    title: 'University Assignment Deleted',
+                    message: `Your assignment to the university has been deleted.`,
+                    type: 'UNIVERSITY',
+                    recipientType: 'Student',
+                    recipientId: assignment.studentId,
+                    isRead: false
+                });
+                await notification.save();
+            } catch (err) {
+                console.error('Failed to send notification about assignment deletion:', err);
+            }
+
             httpResponse(req, res, 200, responseMessage.SUCCESS, {
                 message: 'Student-university assignment deleted successfully'
             });

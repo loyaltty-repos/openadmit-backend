@@ -4,6 +4,15 @@ import httpResponse from "../../util/httpResponse.js";
 import responseMessage from "../../constant/responseMessage.js";
 import httpError from "../../util/httpError.js";
 import Notification from "../../model/Notification.js"; // ✅ use your actual new model file name/path
+import mailer from "../../service/email.service.js";
+import { emitToUser } from "../../config/socket.js";
+import {
+  ChatMessageToStudentEmailTemplate,
+  ChatMessageToAdminEmailTemplate,
+} from "../../service/emailTemplates.js";
+import Student from "../../model/studentModel.js"; // :contentReference[oaicite:0]{index=0}
+import Member from "../../model/membersModel.js"; // :contentReference[oaicite:1]{index=1}
+
 
 /**
  * Helper: figure out "who" is making the request.
@@ -257,7 +266,7 @@ export default {
         {
           _id: notificationId,
           recipientType: expectedType,
-          
+
         },
         { $set: { isRead: true } }, // timestamps will update updatedDate automatically
         { new: true }
@@ -276,69 +285,239 @@ export default {
     }
   },
 
-    // ======================================================
+  // ======================================================
   // STUDENT -> ADMIN (Member): Chat Message Notification
   // POST /notifications/student/chat-messages
   // ======================================================
-  sendChatMessageNotificationToAdmin: async (req, res, next) => {
-    try {
-      const { authenticatedStudent } = req;
+  // sendChatMessageNotificationToAdmin: async (req, res, next) => {
+  //   try {
+  //     const { authenticatedStudent } = req;
 
-      if (!authenticatedStudent?._id) {
-        return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
-      }
+  //     if (!authenticatedStudent?._id) {
+  //       return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+  //     }
 
-      const { adminId, title, message } = req.body;
+  //     const { adminId, title, message } = req.body;
 
-      if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("Valid adminId is required")),
-          req,
-          422
-        );
-      }
+  //     if (!adminId || !mongoose.Types.ObjectId.isValid(adminId)) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("Valid adminId is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
 
-      if (!title || String(title).trim().length === 0) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
-          req,
-          422
-        );
-      }
+  //     if (!title || String(title).trim().length === 0) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
 
-      if (!message || String(message).trim().length === 0) {
-        return httpError(
-          next,
-          new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
-          req,
-          422
-        );
-      }
+  //     if (!message || String(message).trim().length === 0) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
 
-      const notification = await Notification.create({
-        title: String(title).trim(),
-        message: String(message).trim(),
-        type: "MESSAGE",
-        recipientType: "Member",
-        recipientId: adminId,
-        isRead: false,
-      });
+  //     const notification = await Notification.create({
+  //       title: String(title).trim(),
+  //       message: String(message).trim(),
+  //       type: "MESSAGE",
+  //       recipientType: "Member",
+  //       recipientId: adminId,
+  //       isRead: false,
+  //     });
 
-      return httpResponse(req, res, 201, responseMessage.SUCCESS, {
-        message: "Chat message notification sent to admin",
-        notification,
-      });
-    } catch (err) {
-      return httpError(next, err, req, 500);
+  //     return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+  //       message: "Chat message notification sent to admin",
+  //       notification,
+  //     });
+  //   } catch (err) {
+  //     return httpError(next, err, req, 500);
+  //   }
+  // },
+
+sendChatMessageNotificationToAdmin: async (req, res, next) => {
+  try {
+    const { authenticatedStudent } = req;
+
+    if (!authenticatedStudent?._id) {
+      return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
     }
-  },
+
+    const { title, message } = req.body;
+
+    if (!title || String(title).trim().length === 0) {
+      return httpError(
+        next,
+        new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+        req,
+        422
+      );
+    }
+
+    if (!message || String(message).trim().length === 0) {
+      return httpError(
+        next,
+        new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+        req,
+        422
+      );
+    }
+
+    const cleanTitle = String(title).trim();
+    const cleanMessage = String(message).trim();
+    const messagePreview =
+      cleanMessage.length > 240 ? `${cleanMessage.slice(0, 240)}…` : cleanMessage;
+
+    // ✅ Fetch ALL members/admins
+    const members = await Member.find({}).select("_id email firstName lastName").lean();
+
+    if (!members || members.length === 0) {
+      // No members to notify; still return success (don’t break flow)
+      return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+        message: "No members found to notify",
+        notification: null,
+      });
+    }
+
+    // ✅ Create notifications for ALL members in one DB call
+    const notificationsPayload = members.map((m) => ({
+      title: cleanTitle,
+      message: cleanMessage,
+      type: "MESSAGE",
+      recipientType: "Member",
+      recipientId: m._id,
+      isRead: false,
+    }));
+
+    const createdNotifications = await Notification.insertMany(notificationsPayload, {
+      ordered: false,
+    });
+
+    // ✅ Socket emit to ALL members (never break API)
+    try {
+      for (const n of createdNotifications) {
+        try {
+          emitToUser(String(n.recipientId), "notification:new", {
+            notification: n,
+            recipientType: "Member",
+          });
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // ✅ Email to ALL members (never break API)
+    try {
+      const studentName = authenticatedStudent?.name || "Student";
+      const studentEmail = authenticatedStudent?.email || null;
+
+      for (const m of members) {
+        try {
+          const email = m?.email ? String(m.email).trim() : null;
+          if (!email) continue;
+
+          const adminName =
+            `${m?.firstName || ""} ${m?.lastName || ""}`.trim() || "Admin";
+
+          const tpl = ChatMessageToAdminEmailTemplate({
+            adminName,
+            studentName,
+            studentEmail,
+            messagePreview,
+            dashboardUrl:
+              process.env.ADMIN_DASHBOARD_URL || "https://admin.openadmit.com",
+          });
+
+          await mailer.sendEmail(email, tpl);
+        } catch (_) {
+          // ignore per-recipient failure
+        }
+      }
+    } catch (_) {}
+
+    // ✅ Response: keep same structure, but include count + sample notification
+    return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+      message: "Chat message notification sent to all admins/members",
+      notification: createdNotifications?.[0] || null,
+      meta: { deliveredToMembers: members.length },
+    });
+  } catch (err) {
+    return httpError(next, err, req, 500);
+  }
+},
+
+
+
 
   // ======================================================
   // ADMIN (Member) -> STUDENT: Chat Message Notification
   // POST /notifications/admin/chat-messages/:studentId
   // ======================================================
+  // sendChatMessageNotificationToStudent: async (req, res, next) => {
+  //   try {
+  //     const { authenticatedMember } = req;
+
+  //     if (!authenticatedMember?._id) {
+  //       return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+  //     }
+
+  //     const { studentId } = req.params;
+
+  //     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("Valid studentId is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
+
+  //     const { title, message } = req.body;
+
+  //     if (!title || String(title).trim().length === 0) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
+
+  //     if (!message || String(message).trim().length === 0) {
+  //       return httpError(
+  //         next,
+  //         new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+  //         req,
+  //         422
+  //       );
+  //     }
+
+  //     const notification = await Notification.create({
+  //       title: String(title).trim(),
+  //       message: String(message).trim(),
+  //       type: "MESSAGE",
+  //       recipientType: "Student",
+  //       recipientId: studentId,
+  //       isRead: false,
+  //     });
+
+  //     return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+  //       message: "Chat message notification sent to student",
+  //       notification,
+  //     });
+  //   } catch (err) {
+  //     return httpError(next, err, req, 500);
+  //   }
+  // },
+
   sendChatMessageNotificationToStudent: async (req, res, next) => {
     try {
       const { authenticatedMember } = req;
@@ -378,14 +557,50 @@ export default {
         );
       }
 
+      const cleanTitle = String(title).trim();
+      const cleanMessage = String(message).trim();
+
+      // ✅ Notification (unchanged)
       const notification = await Notification.create({
-        title: String(title).trim(),
-        message: String(message).trim(),
+        title: cleanTitle,
+        message: cleanMessage,
         type: "MESSAGE",
         recipientType: "Student",
         recipientId: studentId,
         isRead: false,
       });
+
+      // ✅ Socket emit (never breaks API)
+      try {
+        emitToUser(studentId, "notification:new", {
+          notification,
+          recipientType: "Student",
+        });
+      } catch (err) {
+        console.error("SOCKET_EMIT_FAILED_STUDENT", err?.message || err);
+      }
+
+      // ✅ Email send to student (never breaks API)
+      try {
+        const student = await Student.findById(studentId).select("email name").lean();
+        const studentEmail = student?.email ? String(student.email).trim() : null;
+
+        if (studentEmail) {
+          const studentName = student?.name || "Student";
+          const adminName = `${authenticatedMember?.firstName || ""} ${authenticatedMember?.lastName || ""}`.trim() || "Open Admit Admin";
+
+          const tpl = ChatMessageToStudentEmailTemplate({
+            studentName,
+            adminName,
+            messagePreview: cleanMessage.length > 240 ? `${cleanMessage.slice(0, 240)}…` : cleanMessage,
+            dashboardUrl: process.env.STUDENT_DASHBOARD_URL || "https://openadmit.com/dashboard",
+          });
+
+          await mailer.sendEmail(studentEmail, tpl);
+        }
+      } catch (err) {
+        console.error("EMAIL_SEND_FAILED_STUDENT", err?.message || err);
+      }
 
       return httpResponse(req, res, 201, responseMessage.SUCCESS, {
         message: "Chat message notification sent to student",
@@ -395,5 +610,7 @@ export default {
       return httpError(next, err, req, 500);
     }
   },
+
+
 
 };

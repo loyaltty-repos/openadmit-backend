@@ -1306,3 +1306,346 @@ This is an initiation notification. Final status depends on verification and cap
 
   return { subject, text, html };
 };
+
+
+export const ChatMessageToStudentEmailTemplate = ({
+  studentName,
+  adminName,
+  messagePreview,
+  dashboardUrl = "https://openadmit.com/dashboard",
+}) => {
+  const subject = `New message from ${adminName || "Open Admit Admin"} - Open Admit`;
+
+  const text = `Hi ${studentName || "Student"},
+
+You have a new message from ${adminName || "Open Admit Admin"}.
+
+Message:
+"${messagePreview || "You have received a new message."}"
+
+Open your dashboard to reply:
+${dashboardUrl}
+
+— Open Admit Team`;
+
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>New Message - Open Admit</title>
+
+    <!--[if mso]>
+      <style type="text/css">
+        * { font-family: Arial, sans-serif !important; }
+      </style>
+    <![endif]-->
+
+    <style>
+      html, body { margin:0 !important; padding:0 !important; height:100% !important; width:100% !important; }
+      * { -ms-text-size-adjust:100%; -webkit-text-size-adjust:100%; }
+      table, td { mso-table-lspace:0pt !important; mso-table-rspace:0pt !important; }
+      img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; display:block; }
+      a { text-decoration:none; }
+
+      body { background-color:#f4f7fb; color:#333333; }
+      .email-container { width:100% !important; max-width:600px !important; margin:0 auto !important; }
+
+      .card {
+        background:#ffffff; border-radius:12px; overflow:hidden;
+        box-shadow:0 4px 12px rgba(0,0,0,0.05);
+      }
+
+      .header { background:#0B2A5B; color:#ffffff; padding:36px 24px; text-align:center; }
+      .brand { margin:0 0 8px; font-size:28px; font-weight:700; letter-spacing:0.5px; }
+      .subtitle { margin:0; font-size:15px; opacity:0.92; }
+
+      .content { background:#f9f9f9; padding:32px 24px; }
+
+      .message-box {
+        background:#ffffff; border:1px solid #e6e6e6; border-radius:12px;
+        padding:22px; margin:18px 0;
+        box-shadow:0 2px 8px rgba(0,0,0,0.06);
+      }
+      .message-title { margin:0 0 8px; font-size:18px; font-weight:700; color:#0B2A5B; }
+      .message-meta { margin:0 0 14px; font-size:14px; color:#666666; }
+      .message-preview {
+        margin:0; font-size:15px; color:#333333; line-height:1.7;
+        background:#EEF4FF; padding:14px 14px; border-radius:10px;
+        border-left:4px solid #0B2A5B;
+      }
+
+      .cta-card {
+        background:#E9F0FF; padding:22px; border-radius:12px; text-align:center; margin:22px 0;
+      }
+      .cta-title { margin:0 0 8px; font-size:17px; font-weight:700; color:#0B2A5B; }
+      .cta-text { margin:0 0 14px; font-size:14px; color:#444444; }
+
+      .btn {
+        display:inline-block; background:#0B2A5B; color:#ffffff;
+        padding:14px 28px; border-radius:8px;
+        font-weight:700; font-size:15px;
+        box-shadow:0 4px 12px rgba(11,42,91,0.22);
+      }
+
+      .footer { text-align:center; padding:22px; color:#888888; font-size:13px; background:#f4f7fb; }
+      .footer a { color:#0B2A5B; }
+
+      @media screen and (max-width:600px) {
+        .header { padding:24px 16px !important; }
+        .content { padding:24px 16px !important; }
+        .brand { font-size:24px !important; }
+        .btn { padding:12px 22px !important; font-size:14px !important; }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body { background:#0f1214 !important; color:#e6e6e6 !important; }
+        .card { background:#111418 !important; box-shadow:none !important; }
+        .content { background:#0d1214 !important; }
+        .message-box { background:#12181a !important; border-color:#243032 !important; }
+        .message-preview { background:#101a2a !important; border-left-color:#2E6BFF !important; color:#e6e6e6 !important; }
+        .cta-card { background:#101a2a !important; }
+        .footer { color:#bbbbbb !important; }
+        a { color:#A9C7FF !important; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">
+      You have a new message on Open Admit. Open your dashboard to reply.
+    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f7fb;">
+      <tr>
+        <td align="center" style="padding:20px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="email-container">
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="card">
+                  <tr>
+                    <td class="header">
+                      <h1 class="brand" style="margin:0 0 10px;">Open Admit</h1>
+                      <p class="subtitle" style="margin:0;">You’ve got a new message</p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="content">
+                      <div class="message-box">
+                        <h2 class="message-title">New message received</h2>
+                        <p class="message-meta">
+                          From: <strong>${adminName || "Open Admit Admin"}</strong>
+                        </p>
+                        <p class="message-preview">
+                          ${messagePreview || "You have received a new message. Open your dashboard to view and reply."}
+                        </p>
+                      </div>
+
+                      <div class="cta-card">
+                        <h3 class="cta-title">Reply from your dashboard</h3>
+                        <p class="cta-text">Open Open Admit to continue the conversation.</p>
+                        <a class="btn" href="${dashboardUrl}">Open Dashboard</a>
+                      </div>
+
+                      <p style="margin:0;color:#666666;font-size:13px;line-height:1.6;text-align:center;">
+                        Tip: Keep your notifications on so you don’t miss important updates.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="footer">
+                      <p style="margin:6px 0;">© ${new Date().getFullYear()} <strong>Open Admit</strong>. All rights reserved.</p>
+                      <p style="margin:6px 0;">This is an automated email. Please do not reply.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+  </html>
+  `;
+
+  return { subject, text, html };
+};
+
+
+export const ChatMessageToAdminEmailTemplate = ({
+  adminName,
+  studentName,
+  studentEmail,
+  messagePreview,
+  dashboardUrl = "https://admin.openadmit.com",
+}) => {
+  const subject = `New message from ${studentName || "a student"} - Open Admit Admin`;
+
+  const text = `Hi ${adminName || "Admin"},
+
+You have a new message from ${studentName || "a student"}${studentEmail ? ` (${studentEmail})` : ""}.
+
+Message:
+"${messagePreview || "You have received a new message."}"
+
+Open the admin dashboard to reply:
+${dashboardUrl}
+
+— Open Admit Team`;
+
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>New Message - Open Admit Admin</title>
+
+    <!--[if mso]>
+      <style type="text/css">
+        * { font-family: Arial, sans-serif !important; }
+      </style>
+    <![endif]-->
+
+    <style>
+      html, body { margin:0 !important; padding:0 !important; height:100% !important; width:100% !important; }
+      * { -ms-text-size-adjust:100%; -webkit-text-size-adjust:100%; }
+      table, td { mso-table-lspace:0pt !important; mso-table-rspace:0pt !important; }
+      img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; display:block; }
+      a { text-decoration:none; }
+
+      body { background-color:#f4f7fb; color:#333333; }
+      .email-container { width:100% !important; max-width:600px !important; margin:0 auto !important; }
+
+      .card {
+        background:#ffffff; border-radius:12px; overflow:hidden;
+        box-shadow:0 4px 12px rgba(0,0,0,0.05);
+      }
+
+      .header { background:#111827; color:#ffffff; padding:36px 24px; text-align:center; }
+      .brand { margin:0 0 8px; font-size:28px; font-weight:700; letter-spacing:0.5px; }
+      .subtitle { margin:0; font-size:15px; opacity:0.92; }
+
+      .content { background:#f9f9f9; padding:32px 24px; }
+
+      .message-box {
+        background:#ffffff; border:1px solid #e6e6e6; border-radius:12px;
+        padding:22px; margin:18px 0;
+        box-shadow:0 2px 8px rgba(0,0,0,0.06);
+      }
+      .message-title { margin:0 0 8px; font-size:18px; font-weight:700; color:#111827; }
+      .message-meta { margin:0 0 14px; font-size:14px; color:#666666; }
+      .message-preview {
+        margin:0; font-size:15px; color:#333333; line-height:1.7;
+        background:#F3F4F6; padding:14px 14px; border-radius:10px;
+        border-left:4px solid #111827;
+      }
+
+      .cta-card {
+        background:#EEF2FF; padding:22px; border-radius:12px; text-align:center; margin:22px 0;
+      }
+      .cta-title { margin:0 0 8px; font-size:17px; font-weight:700; color:#111827; }
+      .cta-text { margin:0 0 14px; font-size:14px; color:#444444; }
+
+      .btn {
+        display:inline-block; background:#111827; color:#ffffff;
+        padding:14px 28px; border-radius:8px;
+        font-weight:700; font-size:15px;
+        box-shadow:0 4px 12px rgba(17,24,39,0.22);
+      }
+
+      .footer { text-align:center; padding:22px; color:#888888; font-size:13px; background:#f4f7fb; }
+      .footer a { color:#111827; }
+
+      @media screen and (max-width:600px) {
+        .header { padding:24px 16px !important; }
+        .content { padding:24px 16px !important; }
+        .brand { font-size:24px !important; }
+        .btn { padding:12px 22px !important; font-size:14px !important; }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body { background:#0f1214 !important; color:#e6e6e6 !important; }
+        .card { background:#111418 !important; box-shadow:none !important; }
+        .content { background:#0d1214 !important; }
+        .message-box { background:#12181a !important; border-color:#243032 !important; }
+        .message-preview { background:#151a20 !important; border-left-color:#6366F1 !important; color:#e6e6e6 !important; }
+        .cta-card { background:#151a20 !important; }
+        .footer { color:#bbbbbb !important; }
+        a { color:#C7D2FE !important; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">
+      New student message received on Open Admit Admin. Open dashboard to reply.
+    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f7fb;">
+      <tr>
+        <td align="center" style="padding:20px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="email-container">
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="card">
+                  <tr>
+                    <td class="header">
+                      <h1 class="brand" style="margin:0 0 10px;">Open Admit Admin</h1>
+                      <p class="subtitle" style="margin:0;">You’ve got a new student message</p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="content">
+                      <div class="message-box">
+                        <h2 class="message-title">New message received</h2>
+                        <p class="message-meta">
+                          From: <strong>${studentName || "Student"}</strong>
+                          ${studentEmail ? `<span style="color:#666666;">(${studentEmail})</span>` : ""}
+                        </p>
+                        <p class="message-preview">
+                          ${messagePreview || "A student sent a new message. Open the admin dashboard to view and reply."}
+                        </p>
+                      </div>
+
+                      <div class="cta-card">
+                        <h3 class="cta-title">Reply from admin dashboard</h3>
+                        <p class="cta-text">Open Open Admit Admin to continue the conversation.</p>
+                        <a class="btn" href="${dashboardUrl}">Open Admin Dashboard</a>
+                      </div>
+
+                      <p style="margin:0;color:#666666;font-size:13px;line-height:1.6;text-align:center;">
+                        This message was generated by Open Admit notifications.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="footer">
+                      <p style="margin:6px 0;">© ${new Date().getFullYear()} <strong>Open Admit</strong>. All rights reserved.</p>
+                      <p style="margin:6px 0;">This is an automated email. Please do not reply.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+  </html>
+  `;
+
+  return { subject, text, html };
+};
+
