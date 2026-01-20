@@ -344,6 +344,118 @@ export default {
   //   }
   // },
 
+// sendChatMessageNotificationToAdmin: async (req, res, next) => {
+//   try {
+//     const { authenticatedStudent } = req;
+
+//     if (!authenticatedStudent?._id) {
+//       return httpError(next, new Error(responseMessage.UNAUTHORIZED), req, 401);
+//     }
+
+//     const { title, message } = req.body;
+
+//     if (!title || String(title).trim().length === 0) {
+//       return httpError(
+//         next,
+//         new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
+//         req,
+//         422
+//       );
+//     }
+
+//     if (!message || String(message).trim().length === 0) {
+//       return httpError(
+//         next,
+//         new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
+//         req,
+//         422
+//       );
+//     }
+
+//     const cleanTitle = String(title).trim();
+//     const cleanMessage = String(message).trim();
+//     const messagePreview =
+//       cleanMessage.length > 240 ? `${cleanMessage.slice(0, 240)}…` : cleanMessage;
+
+//     // ✅ Fetch ALL members/admins
+//     const members = await Member.find({}).select("_id email firstName lastName").lean();
+
+//     if (!members || members.length === 0) {
+//       // No members to notify; still return success (don’t break flow)
+//       return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+//         message: "No members found to notify",
+//         notification: null,
+//       });
+//     }
+
+//     // ✅ Create notifications for ALL members in one DB call
+//     const notificationsPayload = members.map((m) => ({
+//       title: cleanTitle,
+//       message: cleanMessage,
+//       type: "MESSAGE",
+//       recipientType: "Member",
+//       recipientId: m._id,
+//       isRead: false,
+//     }));
+
+//     const createdNotifications = await Notification.insertMany(notificationsPayload, {
+//       ordered: false,
+//     });
+
+//     // ✅ Socket emit to ALL members (never break API)
+//     try {
+//       for (const n of createdNotifications) {
+//         try {
+//           emitToUser(String(n.recipientId), "notification:new", {
+//             notification: n,
+//             recipientType: "Member",
+//           });
+//         } catch (_) {}
+//       }
+//     } catch (_) {}
+
+
+    
+//     // ✅ Email to ALL members (never break API)
+//     try {
+//       const studentName = authenticatedStudent?.name || "Student";
+//       const studentEmail = authenticatedStudent?.email || null;
+
+//       for (const m of members) {
+//         try {
+//           const email = m?.email ? String(m.email).trim() : null;
+//           if (!email) continue;
+
+//           const adminName =
+//             `${m?.firstName || ""} ${m?.lastName || ""}`.trim() || "Admin";
+
+//           const tpl = ChatMessageToAdminEmailTemplate({
+//             adminName,
+//             studentName,
+//             studentEmail,
+//             messagePreview,
+//             dashboardUrl:
+//               process.env.ADMIN_DASHBOARD_URL || "https://admin.openadmit.com",
+//           });
+
+//           await mailer.sendEmail(email, tpl);
+//         } catch (_) {
+//           // ignore per-recipient failure
+//         }
+//       }
+//     } catch (_) {}
+
+//     // ✅ Response: keep same structure, but include count + sample notification
+//     return httpResponse(req, res, 201, responseMessage.SUCCESS, {
+//       message: "Chat message notification sent to all admins/members",
+//       notification: createdNotifications?.[0] || null,
+//       meta: { deliveredToMembers: members.length },
+//     });
+//   } catch (err) {
+//     return httpError(next, err, req, 500);
+//   }
+// },
+
 sendChatMessageNotificationToAdmin: async (req, res, next) => {
   try {
     const { authenticatedStudent } = req;
@@ -355,21 +467,10 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
     const { title, message } = req.body;
 
     if (!title || String(title).trim().length === 0) {
-      return httpError(
-        next,
-        new Error(responseMessage.CUSTOM_MESSAGE("title is required")),
-        req,
-        422
-      );
+      return httpError(next, new Error(responseMessage.CUSTOM_MESSAGE("title is required")), req, 422);
     }
-
     if (!message || String(message).trim().length === 0) {
-      return httpError(
-        next,
-        new Error(responseMessage.CUSTOM_MESSAGE("message is required")),
-        req,
-        422
-      );
+      return httpError(next, new Error(responseMessage.CUSTOM_MESSAGE("message is required")), req, 422);
     }
 
     const cleanTitle = String(title).trim();
@@ -377,18 +478,15 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
     const messagePreview =
       cleanMessage.length > 240 ? `${cleanMessage.slice(0, 240)}…` : cleanMessage;
 
-    // ✅ Fetch ALL members/admins
     const members = await Member.find({}).select("_id email firstName lastName").lean();
 
     if (!members || members.length === 0) {
-      // No members to notify; still return success (don’t break flow)
       return httpResponse(req, res, 201, responseMessage.SUCCESS, {
         message: "No members found to notify",
         notification: null,
       });
     }
 
-    // ✅ Create notifications for ALL members in one DB call
     const notificationsPayload = members.map((m) => ({
       title: cleanTitle,
       message: cleanMessage,
@@ -398,61 +496,73 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
       isRead: false,
     }));
 
-    const createdNotifications = await Notification.insertMany(notificationsPayload, {
-      ordered: false,
-    });
+    const createdNotifications = await Notification.insertMany(notificationsPayload, { ordered: false });
 
-    // ✅ Socket emit to ALL members (never break API)
-    try {
-      for (const n of createdNotifications) {
-        try {
-          emitToUser(String(n.recipientId), "notification:new", {
-            notification: n,
-            recipientType: "Member",
-          });
-        } catch (_) {}
-      }
-    } catch (_) {}
-
-    // ✅ Email to ALL members (never break API)
-    try {
-      const studentName = authenticatedStudent?.name || "Student";
-      const studentEmail = authenticatedStudent?.email || null;
-
-      for (const m of members) {
-        try {
-          const email = m?.email ? String(m.email).trim() : null;
-          if (!email) continue;
-
-          const adminName =
-            `${m?.firstName || ""} ${m?.lastName || ""}`.trim() || "Admin";
-
-          const tpl = ChatMessageToAdminEmailTemplate({
-            adminName,
-            studentName,
-            studentEmail,
-            messagePreview,
-            dashboardUrl:
-              process.env.ADMIN_DASHBOARD_URL || "https://admin.openadmit.com",
-          });
-
-          await mailer.sendEmail(email, tpl);
-        } catch (_) {
-          // ignore per-recipient failure
-        }
-      }
-    } catch (_) {}
-
-    // ✅ Response: keep same structure, but include count + sample notification
-    return httpResponse(req, res, 201, responseMessage.SUCCESS, {
-      message: "Chat message notification sent to all admins/members",
+    // ✅ Send response NOW (do not wait for socket/email)
+    httpResponse(req, res, 201, responseMessage.SUCCESS, {
+      message: "Chat message notification queued for all admins/members",
       notification: createdNotifications?.[0] || null,
       meta: { deliveredToMembers: members.length },
     });
+
+    // ✅ Now do background work (fire-and-forget)
+    setImmediate(async () => {
+      // Socket emits (no await needed)
+      try {
+        for (const n of createdNotifications) {
+          try {
+            emitToUser(String(n.recipientId), "notification:new", {
+              notification: n,
+              recipientType: "Member",
+            });
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      // Emails (DO NOT block request)
+      try {
+        const studentName = authenticatedStudent?.name || "Student";
+        const studentEmail = authenticatedStudent?.email || null;
+
+        // optional: limit concurrency so you don't blast SMTP
+        const CONCURRENCY = 10;
+        let i = 0;
+
+        const workers = Array.from({ length: CONCURRENCY }).map(async () => {
+          while (i < members.length) {
+            const idx = i++;
+            const m = members[idx];
+
+            try {
+              const email = m?.email ? String(m.email).trim() : null;
+              if (!email) continue;
+
+              const adminName =
+                `${m?.firstName || ""} ${m?.lastName || ""}`.trim() || "Admin";
+
+              const tpl = ChatMessageToAdminEmailTemplate({
+                adminName,
+                studentName,
+                studentEmail,
+                messagePreview,
+                dashboardUrl: process.env.ADMIN_DASHBOARD_URL || "https://admin.openadmit.com",
+              });
+
+              await mailer.sendEmail(email, tpl);
+            } catch (_) {}
+          }
+        });
+
+        await Promise.allSettled(workers);
+      } catch (_) {}
+    });
+
+    // IMPORTANT: don't return again; response already sent.
   } catch (err) {
     return httpError(next, err, req, 500);
   }
 },
+
 
 
 
