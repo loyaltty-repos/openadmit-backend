@@ -479,7 +479,7 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
       cleanMessage.length > 240 ? `${cleanMessage.slice(0, 240)}…` : cleanMessage;
 
     const members = await Member.find({}).select("_id email firstName lastName").lean();
-
+const adminId = members[0]._id
     if (!members || members.length === 0) {
       return httpResponse(req, res, 201, responseMessage.SUCCESS, {
         message: "No members found to notify",
@@ -487,37 +487,45 @@ sendChatMessageNotificationToAdmin: async (req, res, next) => {
       });
     }
 
-    const notificationsPayload = members.map((m) => ({
-      title: cleanTitle,
-      message: cleanMessage,
-      type: "MESSAGE",
-      recipientType: "Member",
-      recipientId: m._id,
-      isRead: false,
-    }));
+    // const notificationsPayload = members.map((m) => ({
+    //   title: cleanTitle,
+    //   message: cleanMessage,
+    //   type: "MESSAGE",
+    //   recipientType: "Member",
+    //   recipientId: m._id,
+    //   isRead: false,
+    // }));
 
-    const createdNotifications = await Notification.insertMany(notificationsPayload, { ordered: false });
+    // const createdNotifications = await Notification.insertMany(notificationsPayload, { ordered: false });
 
+          const notification = await Notification.create({
+        title: String(title).trim(),
+        message: String(message).trim(),
+        type: "MESSAGE",
+        recipientType: "Member",
+         recipientId: adminId,
+        isRead: false,
+      }); 
+      try {
+        for (const m of members) {
+          try {
+            emitToUser(String(m._id), "notification:new", {
+              
+            });
+          } catch (_) {}
+        }
+      } catch (_) {}
     // ✅ Send response NOW (do not wait for socket/email)
     httpResponse(req, res, 201, responseMessage.SUCCESS, {
       message: "Chat message notification queued for all admins/members",
-      notification: createdNotifications?.[0] || null,
+      notification,
       meta: { deliveredToMembers: members.length },
     });
 
     // ✅ Now do background work (fire-and-forget)
     setImmediate(async () => {
       // Socket emits (no await needed)
-      try {
-        for (const n of createdNotifications) {
-          try {
-            emitToUser(String(n.recipientId), "notification:new", {
-              notification: n,
-              recipientType: "Member",
-            });
-          } catch (_) {}
-        }
-      } catch (_) {}
+      
 
       // Emails (DO NOT block request)
       try {

@@ -16,6 +16,7 @@ import Member from '../../model/membersModel.js';
 import Notification from '../../model/Notification.js';
 import TaskCategory from '../../model/taskCategoryModel.js';
 import SubtaskQuestionnaireAssignment from '../../model/subtaskQuestionnaireAssignmentModel.js';
+import { emitToUser } from '../../config/socket.js';
 
 export default {
     // Create a new task with associated students and subtasks (ADMIN only)
