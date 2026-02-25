@@ -10,20 +10,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout Repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2️⃣ Login to GitHub Container Registry
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      # 3️⃣ Build Docker Image
       - name: Build Docker Image
         run: |
           docker build -t ghcr.io/loyaltty-repos/openadmit-backend:dev .
 
+      # 4️⃣ Push Docker Image
       - name: Push Docker Image
         run: |
           docker push ghcr.io/loyaltty-repos/openadmit-backend:dev
 
+      # 5️⃣ Deploy to Dev Server
       - name: Deploy to Dev Server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -31,11 +36,17 @@ jobs:
           username: root
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           script: |
+            cd /var/www/openadmit/backend
+
             docker pull ghcr.io/loyaltty-repos/openadmit-backend:dev
+
             docker stop openadmit-dev || true
             docker rm openadmit-dev || true
+
             docker run -d \
               --name openadmit-dev \
-              -p 5003:5003 \
-              --env-file /root/openadmit/.env \
+              --restart always \
+              -p 9100:5003 \
+              --env-file /var/www/openadmit/backend/.env \
+              -v /var/www/openadmit/backend/firebase-service-account.json:/app/firebase-service-account.json \
               ghcr.io/loyaltty-repos/openadmit-backend:dev
