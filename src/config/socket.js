@@ -52,8 +52,7 @@ export function initSocket(httpServer, options = {}) {
     transports = ["websocket", "polling"],
     pingTimeout = 20000,
     pingInterval = 25000,
-    onConnection, // optional
-  } = options;
+    onConnection, // optional 
 
   io = new Server(httpServer, {
     path,
