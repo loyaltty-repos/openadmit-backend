@@ -12,7 +12,7 @@ const socketUsers = new Map();
 function requireIO() {
   if (!io) {
     throw new Error(
-      "Socket.IO not initialized. Call initSocket(httpServer) before using getIO()/emit helpers."
+      "Socket.IO not initialized. Call initSocket(httpServer) before using getIO()/emit helpers.",
     );
   }
   return io;
@@ -46,13 +46,24 @@ function getSocketsByUser(userId) {
 export function initSocket(httpServer, options = {}) {
   if (io) return io; // idempotent
 
+  // const {
+  //   corsOrigin = process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || "*",
+  //   path = process.env.SOCKET_PATH || "/socket.io",
+  //   transports = ["websocket", "polling"],
+  //   pingTimeout = 20000,
+  //   pingInterval = 25000,
+  //   onConnection, // optional
+
   const {
-    corsOrigin = process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || "*",
+    corsOrigin = process.env.SOCKET_CORS_ORIGIN ||
+      process.env.CORS_ORIGIN ||
+      "*",
     path = process.env.SOCKET_PATH || "/socket.io",
     transports = ["websocket", "polling"],
     pingTimeout = 20000,
     pingInterval = 25000,
-    onConnection, // optional 
+    onConnection, // optional
+  } = options;
 
   io = new Server(httpServer, {
     path,
