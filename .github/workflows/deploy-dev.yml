@@ -46,7 +46,7 @@ jobs:
             docker run -d \
               --name openadmit-dev \
               --restart always \
-              -p 9100:5003 \
+              -p 127.0.0.1:9100:5003 \
               --env-file /var/www/openadmit/backend/.env \
               -v /var/www/openadmit/backend/firebase-service-account.json:/app/firebase-service-account.json \
               ghcr.io/loyaltty-repos/openadmit-backend:dev
